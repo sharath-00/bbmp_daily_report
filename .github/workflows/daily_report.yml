@@ -2,8 +2,8 @@ name: Daily BBMP Panel Telemetry Report
 
 on:
   schedule:
-    # 9:00 AM IST = 3:30 AM UTC (IST is UTC + 5:30)
-    - cron: '30 3 * * *'
+    # 5:45 PM IST = 12:15 PM UTC (IST is UTC + 5:30)
+    - cron: '15 12 * * *'
   workflow_dispatch: # Allows manual run anytime from GitHub Actions tab
   repository_dispatch:
     types: [run_daily_report]
