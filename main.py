@@ -219,8 +219,7 @@ def run_pipeline(dry_run: bool = False, use_mock: bool = False, print_cli: bool 
         return False
 
     mailer = EmailSender()
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    subject = f"{Config.EMAIL_SUBJECT_PREFIX} Telemetry Status Report - {today_str}"
+    subject = f"{Config.EMAIL_SUBJECT_PREFIX} Telemetry Status Report"
     
     success = mailer.send_email(
         recipients=Config.RECIPIENT_EMAILS,
