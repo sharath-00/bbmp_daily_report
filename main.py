@@ -214,9 +214,9 @@ def run_pipeline(dry_run: bool = False, use_mock: bool = False, print_cli: bool 
     # Validate SMTP configuration before sending
     smtp_missing = Config.validate(check_smtp=True, check_tb=False)
     if smtp_missing:
-        logger.error(f"Cannot send email. Missing SMTP settings in .env: {', '.join(smtp_missing)}")
-        logger.info("Please fill in SMTP_USERNAME, SMTP_PASSWORD, and RECIPIENT_EMAILS in .env.")
-        return False
+        logger.error(f"Cannot send email. Missing SMTP configuration/secrets: {', '.join(smtp_missing)}")
+        logger.error("Please add SMTP_USERNAME, SMTP_PASSWORD, and RECIPIENT_EMAILS into GitHub Repository Secrets or .env file.")
+        sys.exit(1)
 
     mailer = EmailSender()
     subject = f"{Config.EMAIL_SUBJECT_PREFIX} Telemetry Status Report"
