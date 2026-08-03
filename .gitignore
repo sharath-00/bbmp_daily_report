@@ -1,0 +1,18 @@
+# Environment & Secrets
+.env
+
+# Python Cache & Environment
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+env/
+venv/
+
+# Reports & Temp Preview
+report_preview.html
+
+# IDE Configs
+.vscode/
+.idea/
