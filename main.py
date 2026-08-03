@@ -232,6 +232,7 @@ def run_pipeline(dry_run: bool = False, use_mock: bool = False, print_cli: bool 
         logger.info("BBMP Panel Report job completed successfully!")
     else:
         logger.error("BBMP Panel Report job encountered email sending errors.")
+        sys.exit(1)
 
     return success
 
