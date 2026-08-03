@@ -25,7 +25,8 @@ class EmailSender:
         self.smtp_port = smtp_port or Config.SMTP_PORT
         self.use_tls = use_tls if use_tls is not None else Config.SMTP_USE_TLS
         self.username = username or Config.SMTP_USERNAME
-        self.password = password or Config.SMTP_PASSWORD
+        raw_pwd = password or Config.SMTP_PASSWORD
+        self.password = raw_pwd.replace(" ", "").strip() if raw_pwd else ""
         self.sender_email = sender_email or Config.SENDER_EMAIL or self.username
 
     def send_email(self,
