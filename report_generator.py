@@ -253,7 +253,7 @@ def generate_html_report(data: Optional[Dict[str, Any]] = None) -> str:
     """Renders the HTML email body template using panel telemetry data."""
     template = Template(HTML_REPORT_TEMPLATE)
     now_dt = datetime.now()
-    now_str = now_dt.strftime("%Y-%m-%d %H:%M:%S")
+    now_str = now_dt.strftime("%Y-%m-%d")
 
     # Fallback structure if data is None or missing keys
     safe_data = data or {}
