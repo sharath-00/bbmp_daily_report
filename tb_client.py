@@ -419,19 +419,26 @@ class ThingsBoardClient:
                     else:
                         other_offline += 1
 
-        total_offline = (bom_offline + bom_offline_pf) + (east_offline + east_offline_pf) + (other_offline + other_offline_pf)
+        total_offline_excl_pf = bom_offline + east_offline + other_offline
         total_high_current = issues_summary.get("high_current", 0)
         total_mcb_trip = issues_summary.get("mcb_trip", 0)
         total_meter_comm = issues_summary.get("meter_comm_failure", 0)
         total_panels_count = len(devices)
 
-        penalty_points = (total_offline * 1) + (total_high_current * 10) + (total_mcb_trip * 5) + (total_meter_comm * 5)
+        # Penalty points calculation excluding offline(pf)
+        penalty_points = (total_offline_excl_pf * 1) + (total_high_current * 10) + (total_mcb_trip * 5) + (total_meter_comm * 5)
         penalty_pct = (penalty_points / total_panels_count * 100.0) if total_panels_count > 0 else 0.0
-        performance_score = max(0.0, round(100.0 - penalty_pct, 2))
+        kpi_score = max(0.0, round(100.0 - penalty_pct, 2))
+
+        combined_online = bom_online + east_online
+        combined_total = bom_total + east_total
+        performance_score = round((combined_online / combined_total * 100.0), 2) if combined_total > 0 else 0.0
 
         return {
             "customer": "Bangalore (BBMP)",
             "performance_score": performance_score,
+            "panel_performance_score": performance_score,
+            "kpi_score": kpi_score,
             "penalty_points": penalty_points,
             "bommanahalli": {"online": bom_online, "offline": bom_offline, "offline_pf": bom_offline_pf, "total": bom_total},
             "east": {"online": east_online, "offline": east_offline, "offline_pf": east_offline_pf, "total": east_total},

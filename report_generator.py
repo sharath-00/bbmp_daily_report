@@ -147,7 +147,7 @@ HTML_REPORT_TEMPLATE = """
             <div class="kpi-grid">
                 <div class="kpi-card-cell" style="width: 20%; background: #f0fff4; border-color: #c6f6d5;">
                     <div class="kpi-value" style="color: #276749;">{{ inst_summary.performance_score }}%</div>
-                    <div class="kpi-label" style="color: #22543d;">Performance Score</div>
+                    <div class="kpi-label" style="color: #22543d;">Panel Performance Score</div>
                 </div>
                 <div class="kpi-card-cell" style="width: 20%;">
                     <div class="kpi-value" style="color: #2b6cb0;">{{ inst_summary.combined.total }}</div>
@@ -165,6 +165,12 @@ HTML_REPORT_TEMPLATE = """
                     <div class="kpi-value" style="color: #dd6b20;">{{ inst_summary.combined.offline_pf }}</div>
                     <div class="kpi-label">Offline (PF)</div>
                 </div>
+            </div>
+
+            <div style="width: 100%; text-align: left; margin-top: -6px; margin-bottom: 22px; padding-left: 4px; clear: both;">
+                <span style="font-size: 13px; color: #4a5568; font-weight: 500; display: inline-block;">
+                    📊 <strong>KPI Score (excl. Power Failure):</strong> <span style="color: #2b6cb0; font-weight: 700; font-size: 14px;">{{ inst_summary.kpi_score }}%</span>
+                </span>
             </div>
 
             <!-- Panel Telemetry & Online/Offline Report Table -->
@@ -262,6 +268,25 @@ def generate_html_report(data: Optional[Dict[str, Any]] = None) -> str:
             "relay_failure": 0, "meter_comm_failure": 0, "manual_operation": 0, "panel_door_open": 21
         }
     })
+
+    # Ensure performance_score reflects (online_panels / total_panels) * 100
+    comb = inst_summary.get("combined", {})
+    if comb and comb.get("total", 0) > 0:
+        inst_summary["performance_score"] = round((comb.get("online", 0) / comb.get("total", 1)) * 100.0, 2)
+    elif "performance_score" not in inst_summary:
+        inst_summary["performance_score"] = 0.0
+
+    # Ensure kpi_score (excluding offline_pf) is calculated
+    if "kpi_score" not in inst_summary or inst_summary.get("kpi_score") is None:
+        total_p = comb.get("total", 4098) if comb else 4098
+        off_p = comb.get("offline", 0) if comb else 0
+        iss = inst_summary.get("issues", {})
+        high_c = iss.get("high_current", 0)
+        mcb_t = iss.get("mcb_trip", 0)
+        meter_c = iss.get("meter_comm_failure", 0)
+        pen_pts = (off_p * 1) + (high_c * 10) + (mcb_t * 5) + (meter_c * 5)
+        pen_pct = (pen_pts / total_p * 100.0) if total_p > 0 else 0.0
+        inst_summary["kpi_score"] = max(0.0, round(100.0 - pen_pct, 2))
 
     return template.render(
         generated_at=now_str,

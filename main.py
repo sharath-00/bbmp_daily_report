@@ -120,10 +120,11 @@ def print_terminal_summary(data):
     comb = inst.get("combined", {"online": 0, "offline": 0, "offline_pf": 0, "total": 0})
     issues = inst.get("issues", {})
     perf_score = inst.get("performance_score", 0.0)
+    kpi_score = inst.get("kpi_score", 0.0)
     penalty_pts = inst.get("penalty_points", 0)
 
     print("\n" + "="*95)
-    print(f"⚡ BANGALORE (BBMP) PANEL TELEMETRY REPORT | OVERALL PERFORMANCE SCORE: {perf_score}%")
+    print(f"⚡ BANGALORE (BBMP) PANEL TELEMETRY REPORT | PANEL PERFORMANCE SCORE: {perf_score}% | KPI SCORE (excl. PF): {kpi_score}%")
     print("="*95)
     print(f"{'Region / Zone':<26} | {'Online':<10} | {'Offline':<10} | {'Offline (PF)':<12} | {'Total Panels':<10}")
     print("-" * 95)
@@ -155,8 +156,9 @@ def run_pipeline(dry_run: bool = False, use_mock: bool = False, print_cli: bool 
         logger.info("Using mock panel data for report generation.")
         data = {
             "installation_report": {
-                "performance_score": 94.81,
-                "penalty_points": 213,
+                "performance_score": 97.0,
+                "kpi_score": 94.92,
+                "penalty_points": 208,
                 "bommanahalli": {"online": 1408, "offline": 14, "offline_pf": 36, "total": 1458},
                 "east": {"online": 2567, "offline": 34, "offline_pf": 39, "total": 2640},
                 "combined": {"online": 3975, "offline": 48, "offline_pf": 75, "total": 4098},
@@ -237,41 +239,25 @@ def run_pipeline(dry_run: bool = False, use_mock: bool = False, print_cli: bool 
     return success
 
 
-def start_scheduler():
-    """Runs a continuous schedule loop based on SCHEDULE_TIME in config."""
-    import schedule
-
-    target_time = Config.SCHEDULE_TIME
-    logger.info(f"Scheduling daily report job at {target_time}...")
-    
-    schedule.every().day.at(target_time).do(run_pipeline, dry_run=False, use_mock=False)
-
-    logger.info("Scheduler started. Press Ctrl+C to stop.")
-    try:
-        while True:
-            schedule.run_pending()
-            time.sleep(30)
-    except KeyboardInterrupt:
-        logger.info("Scheduler stopped by user.")
-
-
 def main():
     parser = argparse.ArgumentParser(description="BBMP ThingsBoard Panel Monitoring & Email Report Tool")
     parser.add_argument("--print", "--cli", action="store_true", help="Fetch data and print summary directly in terminal without sending email")
     parser.add_argument("--dry-run", action="store_true", help="Fetch data and generate report preview without sending emails")
     parser.add_argument("--send-now", action="store_true", help="Fetch data and send email immediately")
-    parser.add_argument("--schedule", action="store_true", help="Start background daily scheduler")
     parser.add_argument("--mock", action="store_true", help="Use mock telemetry data for testing")
     parser.add_argument("--output", type=str, default="report_preview.html", help="Local preview output filename")
 
     args = parser.parse_args()
 
-    if args.schedule:
-        start_scheduler()
-    elif args.send_now or args.dry_run or args.print or args.mock:
-        run_pipeline(dry_run=args.dry_run, use_mock=args.mock, print_cli=args.print, output_file=args.output)
+    # If --mock is used without --send-now, default dry_run to True so mock data doesn't send email
+    dry_run_mode = args.dry_run
+    if args.mock and not args.send_now:
+        dry_run_mode = True
+
+    if args.send_now or args.dry_run or args.print or args.mock:
+        run_pipeline(dry_run=dry_run_mode, use_mock=args.mock, print_cli=args.print, output_file=args.output)
     else:
-        # Default behavior if no flags provided: print terminal summary and save preview
+        # Default behavior if no flags provided: print terminal summary and save preview without sending email
         logger.info("No specific flag provided. Displaying terminal summary and saving local preview.")
         run_pipeline(dry_run=True, use_mock=args.mock, print_cli=True, output_file=args.output)
 

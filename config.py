@@ -42,7 +42,6 @@ class Config:
     RECIPIENT_EMAILS = [r.strip() for r in _recipients_str.split(",") if r.strip()]
 
     EMAIL_SUBJECT_PREFIX = os.getenv("EMAIL_SUBJECT_PREFIX", "[BBMP Panel Report]").strip()
-    SCHEDULE_TIME = os.getenv("SCHEDULE_TIME", "08:00").strip()
 
     @classmethod
     def validate(cls, check_smtp: bool = True, check_tb: bool = True) -> list[str]:
