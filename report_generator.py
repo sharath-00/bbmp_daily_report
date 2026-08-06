@@ -269,10 +269,13 @@ def generate_html_report(data: Optional[Dict[str, Any]] = None) -> str:
         }
     })
 
-    # Ensure performance_score reflects (online_panels / total_panels) * 100
+    # Performance score reflects (online panels + offline (pf) that occurred today) / total panels * 100
     comb = inst_summary.get("combined", {})
     if comb and comb.get("total", 0) > 0:
-        inst_summary["performance_score"] = round((comb.get("online", 0) / comb.get("total", 1)) * 100.0, 2)
+        online_count = comb.get("online", 0)
+        pf_today_count = comb.get("offline_pf_today", comb.get("offline_pf", 0))
+        total_count = comb.get("total", 1)
+        inst_summary["performance_score"] = round(((online_count + pf_today_count) / total_count) * 100.0, 2)
     elif "performance_score" not in inst_summary:
         inst_summary["performance_score"] = 0.0
 

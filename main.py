@@ -123,16 +123,17 @@ def print_terminal_summary(data):
     kpi_score = inst.get("kpi_score", 0.0)
     penalty_pts = inst.get("penalty_points", 0)
 
-    print("\n" + "="*95)
+    print("\n" + "="*110)
     print(f"⚡ BANGALORE (BBMP) PANEL TELEMETRY REPORT | PANEL PERFORMANCE SCORE: {perf_score}% | KPI SCORE (excl. PF): {kpi_score}%")
-    print("="*95)
-    print(f"{'Region / Zone':<26} | {'Online':<10} | {'Offline':<10} | {'Offline (PF)':<12} | {'Total Panels':<10}")
-    print("-" * 95)
-    print(f"{'Bommanahalli':<26} | {bom.get('online', 0):<10} | {bom.get('offline', 0):<10} | {bom.get('offline_pf', 0):<12} | {bom.get('total', 0):<10}")
-    print(f"{'EAST':<26} | {east.get('online', 0):<10} | {east.get('offline', 0):<10} | {east.get('offline_pf', 0):<12} | {east.get('total', 0):<10}")
-    print("-" * 95)
-    print(f"{'COMBINED (Bommanahalli+EAST)':<26} | {comb.get('online', 0):<10} | {comb.get('offline', 0):<10} | {comb.get('offline_pf', 0):<12} | {comb.get('total', 0):<10}")
-    print("="*95)
+    print(" (Performance Formula: (Online + Offline PF Today) / Total Panels)")
+    print("="*110)
+    print(f"{'Region / Zone':<26} | {'Online':<8} | {'Offline':<8} | {'PF (Today)':<12} | {'PF (Prior)':<12} | {'Total Panels':<10}")
+    print("-" * 110)
+    print(f"{'Bommanahalli':<26} | {bom.get('online', 0):<8} | {bom.get('offline', 0):<8} | {bom.get('offline_pf_today', 0):<12} | {bom.get('offline_pf_prior', 0):<12} | {bom.get('total', 0):<10}")
+    print(f"{'EAST':<26} | {east.get('online', 0):<8} | {east.get('offline', 0):<8} | {east.get('offline_pf_today', 0):<12} | {east.get('offline_pf_prior', 0):<12} | {east.get('total', 0):<10}")
+    print("-" * 110)
+    print(f"{'COMBINED (Bommanahalli+EAST)':<26} | {comb.get('online', 0):<8} | {comb.get('offline', 0):<8} | {comb.get('offline_pf_today', 0):<12} | {comb.get('offline_pf_prior', 0):<12} | {comb.get('total', 0):<10}")
+    print("="*110)
 
     print("\n" + "="*95)
     print(f"⚠️  PANEL ISSUES BREAKDOWN (O&M DASHBOARD) | TOTAL PENALTY POINTS: {penalty_pts}")
@@ -156,7 +157,7 @@ def run_pipeline(dry_run: bool = False, use_mock: bool = False, print_cli: bool 
         logger.info("Using mock panel data for report generation.")
         data = {
             "installation_report": {
-                "performance_score": 97.0,
+                "performance_score": 98.83,
                 "kpi_score": 94.92,
                 "penalty_points": 208,
                 "bommanahalli": {"online": 1408, "offline": 14, "offline_pf": 36, "total": 1458},

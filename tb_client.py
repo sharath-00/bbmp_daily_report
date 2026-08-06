@@ -1,5 +1,5 @@
 import time
-from datetime import datetime, date, timedelta, time as time_obj
+from datetime import datetime, date, timedelta, timezone, time as time_obj
 import logging
 from typing import Dict, Any, List, Optional
 import requests
@@ -241,19 +241,27 @@ class ThingsBoardClient:
             else:
                 break
                 
+        ist = timezone(timedelta(hours=5, minutes=30))
+        now_dt = datetime.now(ist)
+        today_start_dt = datetime(now_dt.year, now_dt.month, now_dt.day, 0, 0, 0, tzinfo=ist)
+        today_start_ts_ms = int(today_start_dt.timestamp() * 1000)
+
         bom_online = 0
         bom_offline = 0
-        bom_offline_pf = 0
+        bom_offline_pf_today = 0
+        bom_offline_pf_prior = 0
         bom_total = 0
 
         east_online = 0
         east_offline = 0
-        east_offline_pf = 0
+        east_offline_pf_today = 0
+        east_offline_pf_prior = 0
         east_total = 0
 
         other_online = 0
         other_offline = 0
-        other_offline_pf = 0
+        other_offline_pf_today = 0
+        other_offline_pf_prior = 0
         other_total = 0
         now_ts_sec = time.time()
         THRESHOLD_SEC = 14400  # 4 Hours (14,400s)
@@ -330,13 +338,18 @@ class ThingsBoardClient:
                 if r_ts.status_code == 200:
                     ts_data = r_ts.json()
                     systime_val = ts_data.get("systime", [{}])[0].get("value") if "systime" in ts_data else None
-                    pkt_val = ts_data.get("pkt", [{}])[0].get("value") if "pkt" in ts_data else None
+                    pkt_entry = ts_data.get("pkt", [{}])[0] if "pkt" in ts_data else {}
+                    pkt_val = pkt_entry.get("value") if isinstance(pkt_entry, dict) else None
+                    pkt_ts = pkt_entry.get("ts", 0) if isinstance(pkt_entry, dict) else 0
                     fault_val = ts_data.get("fault", [{}])[0].get("value") if "fault" in ts_data else None
                     
                     # EXACT DASHBOARD JAVASCRIPT FORMULA FROM O&M DASHBOARD
                     if str(pkt_val) == "8":
-                        status = "OFFLINE_PF"
                         dev_issues["power_failure"] = True
+                        if pkt_ts >= today_start_ts_ms:
+                            status = "OFFLINE_PF_TODAY"
+                        else:
+                            status = "OFFLINE_PF_PRIOR"
                     elif systime_val is not None:
                         try:
                             sys_sec = float(systime_val)
@@ -398,26 +411,36 @@ class ThingsBoardClient:
                     bom_total += 1
                     if status == "ONLINE":
                         bom_online += 1
-                    elif status == "OFFLINE_PF":
-                        bom_offline_pf += 1
+                    elif status == "OFFLINE_PF_TODAY":
+                        bom_offline_pf_today += 1
+                    elif status == "OFFLINE_PF_PRIOR":
+                        bom_offline_pf_prior += 1
                     else:
                         bom_offline += 1
                 elif category == "east":
                     east_total += 1
                     if status == "ONLINE":
                         east_online += 1
-                    elif status == "OFFLINE_PF":
-                        east_offline_pf += 1
+                    elif status == "OFFLINE_PF_TODAY":
+                        east_offline_pf_today += 1
+                    elif status == "OFFLINE_PF_PRIOR":
+                        east_offline_pf_prior += 1
                     else:
                         east_offline += 1
                 else:
                     other_total += 1
                     if status == "ONLINE":
                         other_online += 1
-                    elif status == "OFFLINE_PF":
-                        other_offline_pf += 1
+                    elif status == "OFFLINE_PF_TODAY":
+                        other_offline_pf_today += 1
+                    elif status == "OFFLINE_PF_PRIOR":
+                        other_offline_pf_prior += 1
                     else:
                         other_offline += 1
+
+        bom_offline_pf = bom_offline_pf_today + bom_offline_pf_prior
+        east_offline_pf = east_offline_pf_today + east_offline_pf_prior
+        other_offline_pf = other_offline_pf_today + other_offline_pf_prior
 
         total_offline_excl_pf = bom_offline + east_offline + other_offline
         total_high_current = issues_summary.get("high_current", 0)
@@ -431,8 +454,14 @@ class ThingsBoardClient:
         kpi_score = max(0.0, round(100.0 - penalty_pct, 2))
 
         combined_online = bom_online + east_online
+        combined_offline = bom_offline + east_offline
+        combined_offline_pf_today = bom_offline_pf_today + east_offline_pf_today
+        combined_offline_pf_prior = bom_offline_pf_prior + east_offline_pf_prior
+        combined_offline_pf = bom_offline_pf + east_offline_pf
         combined_total = bom_total + east_total
-        performance_score = round((combined_online / combined_total * 100.0), 2) if combined_total > 0 else 0.0
+
+        # Panel Performance Score formula requested: (online panels + offline (pf) that occurred today) / total panels * 100
+        performance_score = round(((combined_online + combined_offline_pf_today) / combined_total * 100.0), 2) if combined_total > 0 else 0.0
 
         return {
             "customer": "Bangalore (BBMP)",
@@ -440,13 +469,29 @@ class ThingsBoardClient:
             "panel_performance_score": performance_score,
             "kpi_score": kpi_score,
             "penalty_points": penalty_points,
-            "bommanahalli": {"online": bom_online, "offline": bom_offline, "offline_pf": bom_offline_pf, "total": bom_total},
-            "east": {"online": east_online, "offline": east_offline, "offline_pf": east_offline_pf, "total": east_total},
+            "bommanahalli": {
+                "online": bom_online,
+                "offline": bom_offline,
+                "offline_pf": bom_offline_pf,
+                "offline_pf_today": bom_offline_pf_today,
+                "offline_pf_prior": bom_offline_pf_prior,
+                "total": bom_total
+            },
+            "east": {
+                "online": east_online,
+                "offline": east_offline,
+                "offline_pf": east_offline_pf,
+                "offline_pf_today": east_offline_pf_today,
+                "offline_pf_prior": east_offline_pf_prior,
+                "total": east_total
+            },
             "combined": {
-                "online": bom_online + east_online,
-                "offline": bom_offline + east_offline,
-                "offline_pf": bom_offline_pf + east_offline_pf,
-                "total": bom_total + east_total
+                "online": combined_online,
+                "offline": combined_offline,
+                "offline_pf": combined_offline_pf,
+                "offline_pf_today": combined_offline_pf_today,
+                "offline_pf_prior": combined_offline_pf_prior,
+                "total": combined_total
             },
             "issues": issues_summary,
             "total_panels": len(devices)
