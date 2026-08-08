@@ -12,6 +12,7 @@ venv/
 
 # Reports & Temp Preview
 report_preview.html
+.email_thread_state.json
 
 # IDE Configs
 .vscode/

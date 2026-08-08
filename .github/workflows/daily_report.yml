@@ -36,5 +36,7 @@ jobs:
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
           EMAIL_SUBJECT_PREFIX: ${{ secrets.EMAIL_SUBJECT_PREFIX }}
+          ENABLE_EMAIL_THREADING: ${{ secrets.ENABLE_EMAIL_THREADING || 'true' }}
+          EMAIL_THREAD_ID: ${{ secrets.EMAIL_THREAD_ID || 'bbmp-panel-telemetry-report-thread@bbmp.local' }}
         run: |
           python main.py --send-now

@@ -221,14 +221,19 @@ def run_pipeline(dry_run: bool = False, use_mock: bool = False, print_cli: bool 
         logger.error("Please add SMTP_USERNAME, SMTP_PASSWORD, and RECIPIENT_EMAILS into GitHub Repository Secrets or .env file.")
         sys.exit(1)
 
-    mailer = EmailSender()
+    mailer = EmailSender(
+        enable_threading=Config.ENABLE_EMAIL_THREADING,
+        thread_id=Config.EMAIL_THREAD_ID
+    )
     subject = f"{Config.EMAIL_SUBJECT_PREFIX} Telemetry Status Report"
     
     success = mailer.send_email(
         recipients=Config.RECIPIENT_EMAILS,
         subject=subject,
         html_content=html_report,
-        attachment_paths=None
+        attachment_paths=None,
+        enable_threading=Config.ENABLE_EMAIL_THREADING,
+        thread_id=Config.EMAIL_THREAD_ID
     )
 
     if success:

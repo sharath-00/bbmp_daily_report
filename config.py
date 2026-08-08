@@ -42,6 +42,8 @@ class Config:
     RECIPIENT_EMAILS = [r.strip() for r in _recipients_str.split(",") if r.strip()]
 
     EMAIL_SUBJECT_PREFIX = os.getenv("EMAIL_SUBJECT_PREFIX", "[BBMP Panel Report]").strip()
+    ENABLE_EMAIL_THREADING = os.getenv("ENABLE_EMAIL_THREADING", "true").lower() in ("true", "1", "yes")
+    EMAIL_THREAD_ID = os.getenv("EMAIL_THREAD_ID", "bbmp-panel-telemetry-report-thread@bbmp.local").strip()
 
     @classmethod
     def validate(cls, check_smtp: bool = True, check_tb: bool = True) -> list[str]:
