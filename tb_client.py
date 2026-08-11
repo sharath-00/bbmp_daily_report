@@ -373,6 +373,9 @@ class ThingsBoardClient:
             except Exception:
                 pass
 
+            region_attr = ""
+            zone_attr = ""
+            ward_attr = ""
             # 2. Fetch region, zoneName, wardName attributes for categorization
             try:
                 r_attr = self.session.get(f"{self.host}/api/plugins/telemetry/DEVICE/{dev_id}/values/attributes?keys=region,zoneName,wardName", timeout=5)
@@ -380,6 +383,12 @@ class ThingsBoardClient:
                     for item in r_attr.json():
                         k = item.get("key")
                         v = item.get("value")
+                        if k == "region":
+                            region_attr = str(v)
+                        elif k == "zoneName":
+                            zone_attr = str(v)
+                        elif k == "wardName":
+                            ward_attr = str(v)
                         if k in ("region", "zoneName", "wardName") and v:
                             combined_str += " " + str(v).upper()
             except Exception:
@@ -394,18 +403,69 @@ class ThingsBoardClient:
             elif is_east:
                 category = "east"
 
-            return category, status, dev_issues
+            # Calculate offline duration
+            offline_days_str = "-" if status == "ONLINE" else "-"
+            if status != "ONLINE":
+                last_ts_sec = None
+                if status in ("OFFLINE_PF_TODAY", "OFFLINE_PF_PRIOR") and pkt_ts > 0:
+                    last_ts_sec = pkt_ts / 1000.0
+                elif systime_val is not None:
+                    try:
+                        last_ts_sec = float(systime_val)
+                    except Exception:
+                        pass
+                
+                if last_ts_sec and last_ts_sec > 0:
+                    diff_sec = max(0, now_ts_sec - last_ts_sec)
+                    offline_days_val = round(diff_sec / 86400.0, 1)
+                    if offline_days_val < 1.0:
+                        hours = max(1, int(diff_sec // 3600))
+                        offline_days_str = f"{hours} Hours"
+                    else:
+                        offline_days_str = f"{int(offline_days_val)} Days" if offline_days_val.is_integer() else f"{offline_days_val} Days"
+                else:
+                    offline_days_str = "1+ Days" if status == "OFFLINE_PF_PRIOR" else "Today"
+
+            SCREENSHOT_ISSUES_MAP = {
+                "low_voltage": "Low Voltage",
+                "high_voltage": "High Voltage",
+                "high_current": "High Current / Power Theft",
+                "low_current": "Low Current",
+                "mcb_trip": "MCB Trip",
+                "relay_failure": "Relay Failure",
+                "meter_comm_failure": "MeterComm Failure"
+            }
+            active_issues_list = [label for key, label in SCREENSHOT_ISSUES_MAP.items() if dev_issues.get(key)]
+            panel_info = {
+                "id": dev_id,
+                "name": str(dev.get("name", "")),
+                "label": str(dev.get("label", "")),
+                "region": region_attr if region_attr else category.upper(),
+                "zone": zone_attr if zone_attr else "-",
+                "ward": ward_attr if ward_attr else "-",
+                "status": status,
+                "days_offline": offline_days_str,
+                "active_issues": active_issues_list,
+                "dev_issues": dev_issues
+            }
+
+            return category, status, dev_issues, panel_info
 
         logger.info(f"Processing {len(devices)} devices using 30 parallel workers with exact Dashboard formula...")
+
+        affected_panels = []
 
         with ThreadPoolExecutor(max_workers=30) as executor:
             futures = [executor.submit(process_device, dev) for dev in devices]
             for future in as_completed(futures):
-                category, status, dev_issues = future.result()
+                category, status, dev_issues, panel_info = future.result()
 
                 for k, has_issue in dev_issues.items():
                     if has_issue:
                         issues_summary[k] += 1
+
+                if panel_info["active_issues"]:
+                    affected_panels.append(panel_info)
 
                 if category == "bommanahalli":
                     bom_total += 1
@@ -494,6 +554,7 @@ class ThingsBoardClient:
                 "total": combined_total
             },
             "issues": issues_summary,
+            "affected_panels": affected_panels,
             "total_panels": len(devices)
         }
 

@@ -73,7 +73,20 @@ class EmailSender:
 
         current_msg_id = make_msgid(domain=domain)
 
-        msg = MIMEMultipart("alternative")
+        # Build MIME Message Structure
+        if attachment_paths:
+            msg = MIMEMultipart("mixed")
+            body_part = MIMEMultipart("alternative")
+            plain_text = text_content or "Please enable HTML view to see the BBMP Panel Telemetry Report."
+            body_part.attach(MIMEText(plain_text, "plain", "utf-8"))
+            body_part.attach(MIMEText(html_content, "html", "utf-8"))
+            msg.attach(body_part)
+        else:
+            msg = MIMEMultipart("alternative")
+            plain_text = text_content or "Please enable HTML view to see the BBMP Panel Telemetry Report."
+            msg.attach(MIMEText(plain_text, "plain", "utf-8"))
+            msg.attach(MIMEText(html_content, "html", "utf-8"))
+
         msg["Subject"] = subject
         msg["From"] = self.sender_email
         msg["To"] = ", ".join(recipients)
@@ -97,28 +110,28 @@ class EmailSender:
             
             logger.info(f"Email Threading Active | In-Reply-To: {parent_msg_id} | References: {msg['References']}")
 
-        # Plain text fallback
-        plain_text = text_content or "Please enable HTML view to see the BBMP Panel Telemetry Report."
-        msg.attach(MIMEText(plain_text, "plain", "utf-8"))
-
-        # HTML Part
-        msg.attach(MIMEText(html_content, "html", "utf-8"))
-
         # Attachments
         if attachment_paths:
+            import mimetypes
             for path in attachment_paths:
                 if os.path.isfile(path):
                     try:
+                        filename = os.path.basename(path)
+                        ctype, encoding = mimetypes.guess_type(path)
+                        if ctype is None or encoding is not None:
+                            ctype = "application/octet-stream"
+                        maintype, subtype = ctype.split("/", 1)
+
                         with open(path, "rb") as f:
-                            part = MIMEBase("application", "octet-stream")
+                            part = MIMEBase(maintype, subtype)
                             part.set_payload(f.read())
                         encoders.encode_base64(part)
                         part.add_header(
                             "Content-Disposition",
-                            f"attachment; filename={os.path.basename(path)}",
+                            f'attachment; filename="{filename}"',
                         )
                         msg.attach(part)
-                        logger.info(f"Attached file: {path}")
+                        logger.info(f"Attached file: {path} ({ctype})")
                     except Exception as e:
                         logger.error(f"Failed to attach file {path}: {e}")
                 else:
