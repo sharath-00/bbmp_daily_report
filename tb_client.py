@@ -439,14 +439,22 @@ class ThingsBoardClient:
             except Exception:
                 pass
 
+            display_region = region_attr if region_attr else (zone_attr if zone_attr else "")
             is_bom = "BOMMANAHALLI" in combined_str or "BOMMANAHALI" in combined_str or "BMH" in combined_str
             is_east = "EAST" in combined_str or any(kw in combined_str for kw in ["SARVAGNA", "CVRAMAN", "PULAKESHI", "SHIVAJI", "HEBBAL", "SHANTHI"])
 
-            category = "other"
             if is_bom:
                 category = "bommanahalli"
+                region_name = "Bommanahalli Region"
             elif is_east:
                 category = "east"
+                region_name = "EAST Region"
+            elif display_region:
+                category = display_region.lower().replace(" ", "_")
+                region_name = display_region.title() if not display_region.isupper() else display_region
+            else:
+                category = "general"
+                region_name = f"{proj_name} Region"
 
             is_offline_gt_7 = False
             is_offline_pf_gt_7 = False
@@ -499,7 +507,8 @@ class ThingsBoardClient:
                 "id": dev_id,
                 "name": str(dev.get("name", "")),
                 "label": str(dev.get("label", "")),
-                "region": region_attr if region_attr else category.upper(),
+                "region": region_attr if region_attr else region_name,
+                "region_name": region_name,
                 "zone": zone_attr if zone_attr else "-",
                 "ward": ward_attr if ward_attr else "-",
                 "status": status,
@@ -508,18 +517,19 @@ class ThingsBoardClient:
                 "dev_issues": dev_issues
             }
 
-            return category, status, dev_issues, panel_info, is_offline_gt_7, is_offline_pf_gt_7
+            return category, region_name, status, dev_issues, panel_info, is_offline_gt_7, is_offline_pf_gt_7
 
         logger.info(f"Processing {len(devices)} devices using 30 parallel workers with exact Dashboard formula...")
 
         affected_panels = []
         offline_gt_7_count = 0
         offline_pf_gt_7_count = 0
+        dynamic_regions = {}
 
         with ThreadPoolExecutor(max_workers=30) as executor:
             futures = [executor.submit(process_device, dev) for dev in devices]
             for future in as_completed(futures):
-                category, status, dev_issues, panel_info, is_off_gt_7, is_off_pf_gt_7 = future.result()
+                category, region_name, status, dev_issues, panel_info, is_off_gt_7, is_off_pf_gt_7 = future.result()
 
                 if is_off_gt_7:
                     offline_gt_7_count += 1
@@ -533,42 +543,39 @@ class ThingsBoardClient:
                 if panel_info["active_issues"]:
                     affected_panels.append(panel_info)
 
-                if category == "bommanahalli":
-                    bom_total += 1
-                    if status == "ONLINE":
-                        bom_online += 1
-                    elif status == "OFFLINE_PF_TODAY":
-                        bom_offline_pf_today += 1
-                    elif status == "OFFLINE_PF_PRIOR":
-                        bom_offline_pf_prior += 1
-                    else:
-                        bom_offline += 1
-                elif category == "east":
-                    east_total += 1
-                    if status == "ONLINE":
-                        east_online += 1
-                    elif status == "OFFLINE_PF_TODAY":
-                        east_offline_pf_today += 1
-                    elif status == "OFFLINE_PF_PRIOR":
-                        east_offline_pf_prior += 1
-                    else:
-                        east_offline += 1
+                cat_key = category
+                if cat_key not in dynamic_regions:
+                    dynamic_regions[cat_key] = {
+                        "name": region_name,
+                        "online": 0,
+                        "offline": 0,
+                        "offline_pf_today": 0,
+                        "offline_pf_prior": 0,
+                        "offline_pf": 0,
+                        "total": 0
+                    }
+                r_stat = dynamic_regions[cat_key]
+                r_stat["total"] += 1
+                if status == "ONLINE":
+                    r_stat["online"] += 1
+                elif status == "OFFLINE_PF_TODAY":
+                    r_stat["offline_pf_today"] += 1
+                elif status == "OFFLINE_PF_PRIOR":
+                    r_stat["offline_pf_prior"] += 1
                 else:
-                    other_total += 1
-                    if status == "ONLINE":
-                        other_online += 1
-                    elif status == "OFFLINE_PF_TODAY":
-                        other_offline_pf_today += 1
-                    elif status == "OFFLINE_PF_PRIOR":
-                        other_offline_pf_prior += 1
-                    else:
-                        other_offline += 1
+                    r_stat["offline"] += 1
 
-        bom_offline_pf = bom_offline_pf_today + bom_offline_pf_prior
-        east_offline_pf = east_offline_pf_today + east_offline_pf_prior
-        other_offline_pf = other_offline_pf_today + other_offline_pf_prior
+        for r_stat in dynamic_regions.values():
+            r_stat["offline_pf"] = r_stat["offline_pf_today"] + r_stat["offline_pf_prior"]
 
-        total_offline_excl_pf = bom_offline + east_offline + other_offline
+        combined_online = sum(r["online"] for r in dynamic_regions.values())
+        combined_offline = sum(r["offline"] for r in dynamic_regions.values())
+        combined_offline_pf_today = sum(r["offline_pf_today"] for r in dynamic_regions.values())
+        combined_offline_pf_prior = sum(r["offline_pf_prior"] for r in dynamic_regions.values())
+        combined_offline_pf = combined_offline_pf_today + combined_offline_pf_prior
+        combined_total = len(devices)
+
+        total_offline_excl_pf = combined_offline
         total_high_current = issues_summary.get("high_current", 0)
         total_mcb_trip = issues_summary.get("mcb_trip", 0)
         total_meter_comm = issues_summary.get("meter_comm_failure", 0)
@@ -579,18 +586,15 @@ class ThingsBoardClient:
         penalty_pct = (penalty_points / total_panels_count * 100.0) if total_panels_count > 0 else 0.0
         kpi_score = max(0.0, round(100.0 - penalty_pct, 2))
 
-        combined_online = bom_online + east_online
-        combined_offline = bom_offline + east_offline
-        combined_offline_pf_today = bom_offline_pf_today + east_offline_pf_today
-        combined_offline_pf_prior = bom_offline_pf_prior + east_offline_pf_prior
-        combined_offline_pf = bom_offline_pf + east_offline_pf
-        combined_total = bom_total + east_total
-
-        # Panel Performance Score formula requested: (online panels + offline (pf) that occurred today) / total panels * 100
+        # Panel Performance Score: (online panels + offline (pf) that occurred today) / total panels * 100
         performance_score = round(((combined_online + combined_offline_pf_today) / combined_total * 100.0), 2) if combined_total > 0 else 0.0
 
         issues_summary["offline_gt_7_days"] = offline_gt_7_count
         issues_summary["offline_pf_gt_7_days"] = offline_pf_gt_7_count
+
+        regions_list = list(dynamic_regions.values())
+        bom_stat = dynamic_regions.get("bommanahalli", {"online": 0, "offline": 0, "offline_pf": 0, "offline_pf_today": 0, "offline_pf_prior": 0, "total": 0})
+        east_stat = dynamic_regions.get("east", {"online": 0, "offline": 0, "offline_pf": 0, "offline_pf_today": 0, "offline_pf_prior": 0, "total": 0})
 
         return {
             "customer": proj_name,
@@ -601,22 +605,9 @@ class ThingsBoardClient:
             "penalty_points": penalty_points,
             "offline_gt_7_days": offline_gt_7_count,
             "offline_pf_gt_7_days": offline_pf_gt_7_count,
-            "bommanahalli": {
-                "online": bom_online,
-                "offline": bom_offline,
-                "offline_pf": bom_offline_pf,
-                "offline_pf_today": bom_offline_pf_today,
-                "offline_pf_prior": bom_offline_pf_prior,
-                "total": bom_total
-            },
-            "east": {
-                "online": east_online,
-                "offline": east_offline,
-                "offline_pf": east_offline_pf,
-                "offline_pf_today": east_offline_pf_today,
-                "offline_pf_prior": east_offline_pf_prior,
-                "total": east_total
-            },
+            "regions": regions_list,
+            "bommanahalli": bom_stat,
+            "east": east_stat,
             "combined": {
                 "online": combined_online,
                 "offline": combined_offline,

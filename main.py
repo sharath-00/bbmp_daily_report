@@ -116,6 +116,8 @@ if hasattr(sys.stdout, 'buffer'):
 
 def print_terminal_summary(data):
     inst = data.get("installation_report", {})
+    proj_name = inst.get("project_name", "BBMP")
+    regions = inst.get("regions", [])
     bom = inst.get("bommanahalli", {"online": 0, "offline": 0, "offline_pf": 0, "total": 0})
     east = inst.get("east", {"online": 0, "offline": 0, "offline_pf": 0, "total": 0})
     comb = inst.get("combined", {"online": 0, "offline": 0, "offline_pf": 0, "total": 0})
@@ -125,15 +127,20 @@ def print_terminal_summary(data):
     penalty_pts = inst.get("penalty_points", 0)
 
     print("\n" + "="*110)
-    print(f"⚡ BANGALORE (BBMP) PANEL TELEMETRY REPORT | PANEL PERFORMANCE SCORE: {perf_score}% | KPI SCORE (excl. PF): {kpi_score}%")
+    print(f"⚡ {proj_name.upper()} PANEL TELEMETRY REPORT | PANEL PERFORMANCE SCORE: {perf_score}% | KPI SCORE (excl. PF): {kpi_score}%")
     print(" (Performance Formula: (Online + Offline PF Today) / Total Panels)")
     print("="*110)
     print(f"{'Region / Zone':<26} | {'Online':<8} | {'Offline':<8} | {'PF (Today)':<12} | {'PF (Prior)':<12} | {'Total Panels':<10}")
     print("-" * 110)
-    print(f"{'Bommanahalli':<26} | {bom.get('online', 0):<8} | {bom.get('offline', 0):<8} | {bom.get('offline_pf_today', 0):<12} | {bom.get('offline_pf_prior', 0):<12} | {bom.get('total', 0):<10}")
-    print(f"{'EAST':<26} | {east.get('online', 0):<8} | {east.get('offline', 0):<8} | {east.get('offline_pf_today', 0):<12} | {east.get('offline_pf_prior', 0):<12} | {east.get('total', 0):<10}")
+    if regions:
+        for r in regions:
+            r_name = r.get("name", "Region")
+            print(f"{r_name:<26} | {r.get('online', 0):<8} | {r.get('offline', 0):<8} | {r.get('offline_pf_today', 0):<12} | {r.get('offline_pf_prior', 0):<12} | {r.get('total', 0):<10}")
+    else:
+        print(f"{'Bommanahalli':<26} | {bom.get('online', 0):<8} | {bom.get('offline', 0):<8} | {bom.get('offline_pf_today', 0):<12} | {bom.get('offline_pf_prior', 0):<12} | {bom.get('total', 0):<10}")
+        print(f"{'EAST':<26} | {east.get('online', 0):<8} | {east.get('offline', 0):<8} | {east.get('offline_pf_today', 0):<12} | {east.get('offline_pf_prior', 0):<12} | {east.get('total', 0):<10}")
     print("-" * 110)
-    print(f"{'COMBINED (Bommanahalli+EAST)':<26} | {comb.get('online', 0):<8} | {comb.get('offline', 0):<8} | {comb.get('offline_pf_today', 0):<12} | {comb.get('offline_pf_prior', 0):<12} | {comb.get('total', 0):<10}")
+    print(f"{'COMBINED / TOTAL':<26} | {comb.get('online', 0):<8} | {comb.get('offline', 0):<8} | {comb.get('offline_pf_today', 0):<12} | {comb.get('offline_pf_prior', 0):<12} | {comb.get('total', 0):<10}")
     print("="*110)
 
     print("\n" + "="*95)

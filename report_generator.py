@@ -186,22 +186,34 @@ HTML_REPORT_TEMPLATE = """
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td><strong>Bommanahalli Region</strong></td>
-                        <td style="text-align:center;"><strong style="color: #2f855a;">{{ inst_summary.bommanahalli.online }}</strong></td>
-                        <td style="text-align:center;"><span class="badge badge-offline">{{ inst_summary.bommanahalli.offline }}</span></td>
-                        <td style="text-align:center;"><span class="badge badge-warning">{{ inst_summary.bommanahalli.offline_pf }}</span></td>
-                        <td style="text-align:center;">{{ inst_summary.bommanahalli.total }}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>EAST Region</strong></td>
-                        <td style="text-align:center;"><strong style="color: #2f855a;">{{ inst_summary.east.online }}</strong></td>
-                        <td style="text-align:center;"><span class="badge badge-offline">{{ inst_summary.east.offline }}</span></td>
-                        <td style="text-align:center;"><span class="badge badge-warning">{{ inst_summary.east.offline_pf }}</span></td>
-                        <td style="text-align:center;">{{ inst_summary.east.total }}</td>
-                    </tr>
+                    {% if inst_summary.regions and inst_summary.regions|length > 0 %}
+                        {% for reg in inst_summary.regions %}
+                        <tr>
+                            <td><strong>{{ reg.name }}</strong></td>
+                            <td style="text-align:center;"><strong style="color: #2f855a;">{{ reg.online }}</strong></td>
+                            <td style="text-align:center;"><span class="badge badge-offline">{{ reg.offline }}</span></td>
+                            <td style="text-align:center;"><span class="badge badge-warning">{{ reg.offline_pf }}</span></td>
+                            <td style="text-align:center;">{{ reg.total }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td><strong>Bommanahalli Region</strong></td>
+                            <td style="text-align:center;"><strong style="color: #2f855a;">{{ inst_summary.bommanahalli.online }}</strong></td>
+                            <td style="text-align:center;"><span class="badge badge-offline">{{ inst_summary.bommanahalli.offline }}</span></td>
+                            <td style="text-align:center;"><span class="badge badge-warning">{{ inst_summary.bommanahalli.offline_pf }}</span></td>
+                            <td style="text-align:center;">{{ inst_summary.bommanahalli.total }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>EAST Region</strong></td>
+                            <td style="text-align:center;"><strong style="color: #2f855a;">{{ inst_summary.east.online }}</strong></td>
+                            <td style="text-align:center;"><span class="badge badge-offline">{{ inst_summary.east.offline }}</span></td>
+                            <td style="text-align:center;"><span class="badge badge-warning">{{ inst_summary.east.offline_pf }}</span></td>
+                            <td style="text-align:center;">{{ inst_summary.east.total }}</td>
+                        </tr>
+                    {% endif %}
                     <tr class="highlight-row">
-                        <td>🤝 COMBINED (Bommanahalli + EAST)</td>
+                        <td>🤝 TOTAL / COMBINED</td>
                         <td style="text-align:center;"><strong style="color: #2f855a;">{{ inst_summary.combined.online }}</strong></td>
                         <td style="text-align:center;"><span class="badge badge-offline">{{ inst_summary.combined.offline }}</span></td>
                         <td style="text-align:center;"><span class="badge badge-warning">{{ inst_summary.combined.offline_pf }}</span></td>
