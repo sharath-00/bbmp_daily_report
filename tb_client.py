@@ -69,6 +69,37 @@ class ThingsBoardClient:
             logger.error(f"Error fetching tenant devices: {e}")
             return []
 
+    def get_tenant_customers(self, page_size: int = 1000) -> List[Dict[str, Any]]:
+        """Fetch list of all customers for the authenticated tenant."""
+        self._ensure_authenticated()
+        url = f"{self.host}/api/customers"
+        params = {"pageSize": page_size, "page": 0}
+        try:
+            res = self.session.get(url, params=params, timeout=15)
+            if res.status_code != 200:
+                url = f"{self.host}/api/tenant/customers"
+                res = self.session.get(url, params=params, timeout=15)
+            if res.status_code == 200:
+                data = res.json()
+                return data.get("data", []) if isinstance(data, dict) else data
+            else:
+                logger.warning(f"Failed to fetch customers: HTTP {res.status_code} - {res.text}")
+                return []
+        except Exception as e:
+            logger.error(f"Error fetching customers: {e}")
+            return []
+
+    def find_customer_by_name(self, name_query: str) -> Optional[Dict[str, Any]]:
+        """Find customer matching a search query string."""
+        customers = self.get_tenant_customers()
+        query_upper = name_query.upper().strip()
+        for cust in customers:
+            title = str(cust.get("title", cust.get("name", ""))).upper()
+            if query_upper in title:
+                logger.info(f"Found matching ThingsBoard customer for '{name_query}': {cust.get('title')} (ID: {cust.get('id', {}).get('id')})")
+                return cust
+        return None
+
     def get_latest_telemetry(self, entity_type: str, entity_id: str, keys: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         Fetch latest telemetry values for a given entity (DEVICE, ASSET, etc.).
@@ -202,18 +233,30 @@ class ThingsBoardClient:
                 "alarms": alarms
             }
 
-    def fetch_panel_installation_report(self, customer_id: str = "e2119df0-45c3-11f0-94dc-77130b2f47e9") -> Dict[str, Any]:
+    def fetch_panel_installation_report(self, customer_id: Optional[str] = None, project_name: Optional[str] = None) -> Dict[str, Any]:
         """
-        Fetches exact Panel Installation Report data for Customer Bangalore (BBMP)
-        filtering for Bommanahalli and East regions.
+        Fetches Panel Installation Report data for specified customer and project (BBMP or 5B Innovation).
         """
         self._ensure_authenticated()
+        
+        proj_name = project_name or Config.PROJECT_NAME or "BBMP"
+        target_cust_id = customer_id
+
+        if not target_cust_id:
+            if "5B" in proj_name.upper() or "INNOVATION" in proj_name.upper():
+                target_cust_id = Config.TB_CUSTOMER_ID_5B
+                if not target_cust_id:
+                    matched_cust = self.find_customer_by_name("5B") or self.find_customer_by_name("Innovation")
+                    if matched_cust:
+                        target_cust_id = matched_cust.get("id", {}).get("id")
+            if not target_cust_id:
+                target_cust_id = Config.TB_CUSTOMER_ID
         
         # 1. Fetch devices under customer
         devices = []
         page = 0
         while True:
-            url = f"{self.host}/api/customer/{customer_id}/deviceInfos?pageSize=1000&page={page}"
+            url = f"{self.host}/api/customer/{target_cust_id}/deviceInfos?pageSize=1000&page={page}"
             res = None
             for attempt in range(3):
                 try:
@@ -223,7 +266,7 @@ class ThingsBoardClient:
                     logger.warning(f"Attempt {attempt+1} failed to fetch page {page}: {e}")
                     time.sleep(2)
             if not res or res.status_code != 200:
-                url = f"{self.host}/api/customer/{customer_id}/devices?pageSize=1000&page={page}"
+                url = f"{self.host}/api/customer/{target_cust_id}/devices?pageSize=1000&page={page}"
                 for attempt in range(3):
                     try:
                         res = self.session.get(url, timeout=60)
@@ -550,7 +593,8 @@ class ThingsBoardClient:
         issues_summary["offline_pf_gt_7_days"] = offline_pf_gt_7_count
 
         return {
-            "customer": "Bangalore (BBMP)",
+            "customer": proj_name,
+            "project_name": proj_name,
             "performance_score": performance_score,
             "panel_performance_score": performance_score,
             "kpi_score": kpi_score,

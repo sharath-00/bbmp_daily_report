@@ -283,19 +283,63 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
     return str(excel_path)
 
 
-def run_pipeline(dry_run: bool = False, use_mock: bool = False, print_cli: bool = False, output_file: str = "report_preview.html", override_recipients: Optional[List[str]] = None):
+def list_customers_cmd():
+    """Authenticates with ThingsBoard and prints all available Customers and their IDs."""
+    logger.info("Connecting to ThingsBoard to list available Customers...")
+    tb_client = ThingsBoardClient()
+    if tb_client.login():
+        customers = tb_client.get_tenant_customers()
+        print("\n" + "="*85)
+        print("🏢 THINGSBOARD CUSTOMERS LIST")
+        print("="*85)
+        print(f"{'Customer Title / Name':<45} | {'Customer ID (UUID)':<36}")
+        print("-" * 85)
+        if not customers:
+            print("No customers found or account lacks customer list permission.")
+        for cust in customers:
+            title = cust.get("title", cust.get("name", "Unknown"))
+            cid = cust.get("id", {}).get("id", "-")
+            print(f"{title:<45} | {cid:<36}")
+        print("="*85 + "\n")
+    else:
+        logger.error("Failed to authenticate with ThingsBoard API.")
+
+
+def run_pipeline(
+    dry_run: bool = False,
+    use_mock: bool = False,
+    print_cli: bool = False,
+    output_file: str = "report_preview.html",
+    override_recipients: Optional[List[str]] = None,
+    project_name: Optional[str] = None,
+    customer_id: Optional[str] = None,
+    subject_prefix: Optional[str] = None,
+    thread_id: Optional[str] = None
+):
     """
     Main job function: Fetches data, displays terminal summary, generates HTML report, exports issue details Excel, and sends email or saves preview.
     """
-    logger.info("=== Starting BBMP Panel Report Job ===")
+    proj_name = project_name or Config.PROJECT_NAME or "BBMP"
+    if "5B" in proj_name.upper() or "INNOVATION" in proj_name.upper():
+        proj_name = "5B Innovation"
+
+    logger.info(f"=== Starting Panel Report Job for Project: {proj_name} ===")
 
     recipients_to_use = override_recipients or Config.RECIPIENT_EMAILS
+    subj_prefix = subject_prefix or Config.EMAIL_SUBJECT_PREFIX
+    if subject_prefix is None and proj_name != "BBMP":
+        subj_prefix = f"[{proj_name} Panel Report]"
+    
+    t_id = thread_id or Config.EMAIL_THREAD_ID
+    if thread_id is None and proj_name != "BBMP":
+        t_id = f"{proj_name.lower().replace(' ', '-')}-panel-telemetry-report-thread@local"
 
     # 1. Fetch Data
     if use_mock:
-        logger.info("Using mock panel data for report generation.")
+        logger.info(f"Using mock panel data for {proj_name} report generation.")
         data = {
             "installation_report": {
+                "project_name": proj_name,
                 "performance_score": 98.83,
                 "kpi_score": 94.92,
                 "penalty_points": 208,
@@ -311,10 +355,9 @@ def run_pipeline(dry_run: bool = False, use_mock: bool = False, print_cli: bool 
                     "offline_gt_7_days": 18, "offline_pf_gt_7_days": 24
                 },
                 "affected_panels": [
-                    {"id": "dev-101", "name": "Panel-BBMP-BMH-001", "label": "Silk Board Flyover", "region": "BOMMANAHALLI", "zone": "Bommanahalli", "ward": "HSR Ward 174", "status": "ONLINE", "days_offline": "-", "active_issues": ["Low Voltage"]},
-                    {"id": "dev-102", "name": "Panel-BBMP-BMH-002", "label": "Koramangala 100ft", "region": "BOMMANAHALLI", "zone": "Bommanahalli", "ward": "Koramangala Ward 151", "status": "OFFLINE", "days_offline": "3 Days", "active_issues": ["High Voltage"]},
-                    {"id": "dev-103", "name": "Panel-BBMP-EST-005", "label": "MG Road Metro", "region": "EAST", "zone": "East", "ward": "Shanthi Nagar Ward 111", "status": "OFFLINE_PF_PRIOR", "days_offline": "5 Days", "active_issues": ["High Current / Power Theft"]},
-                    {"id": "dev-104", "name": "Panel-BBMP-EST-012", "label": "Indiranagar 12th Main", "region": "EAST", "zone": "East", "ward": "CV Raman Ward 88", "status": "ONLINE", "days_offline": "-", "active_issues": ["MCB Trip"]}
+                    {"id": "dev-101", "name": f"Panel-{proj_name}-001", "label": "Main Sector 1", "region": "NORTH", "zone": "Zone A", "ward": "Ward 10", "status": "ONLINE", "days_offline": "-", "active_issues": ["Low Voltage"]},
+                    {"id": "dev-102", "name": f"Panel-{proj_name}-002", "label": "Central Sector 2", "region": "SOUTH", "zone": "Zone B", "ward": "Ward 12", "status": "OFFLINE", "days_offline": "8 Days", "active_issues": ["High Voltage", "Offline (>7 Days)"]},
+                    {"id": "dev-103", "name": f"Panel-{proj_name}-005", "label": "East Highway 5", "region": "EAST", "zone": "Zone C", "ward": "Ward 15", "status": "OFFLINE_PF_PRIOR", "days_offline": "12 Days", "active_issues": ["High Current / Power Theft", "Offline PF (>7 Days)"]}
                 ]
             },
             "summary": {"total_devices": 4098, "online_devices": 3975, "offline_devices": 123, "active_alarms": 0}
@@ -327,8 +370,8 @@ def run_pipeline(dry_run: bool = False, use_mock: bool = False, print_cli: bool 
         else:
             tb_client = ThingsBoardClient()
             if tb_client.login():
-                logger.info("Fetching Panel Installation Report for Customer Bangalore (BBMP)...")
-                inst_report = tb_client.fetch_panel_installation_report()
+                logger.info(f"Fetching Panel Installation Report for Customer/Project: {proj_name}...")
+                inst_report = tb_client.fetch_panel_installation_report(customer_id=customer_id, project_name=proj_name)
                 alarms = tb_client.get_active_alarms()
                 data = {
                     "installation_report": inst_report,
@@ -348,21 +391,26 @@ def run_pipeline(dry_run: bool = False, use_mock: bool = False, print_cli: bool 
     print_terminal_summary(data)
 
     # Export detailed issues to Excel (.xlsx)
-    excel_file_path = export_panel_issues_to_excel(data)
+    excel_filename = f"{proj_name.lower().replace(' ', '_')}_panel_issues_details.xlsx" if proj_name != "BBMP" else "panel_issues_details.xlsx"
+    excel_file_path = export_panel_issues_to_excel(data, output_excel=excel_filename)
 
     # 2. Generate HTML Report
     logger.info("Generating HTML report...")
     html_report = generate_html_report(data)
 
     # 3. Always save a local preview file
-    preview_path = Path(__file__).resolve().parent / output_file
+    out_file = output_file
+    if output_file == "report_preview.html" and proj_name != "BBMP":
+        out_file = f"{proj_name.lower().replace(' ', '_')}_report_preview.html"
+        
+    preview_path = Path(__file__).resolve().parent / out_file
     with open(preview_path, "w", encoding="utf-8") as f:
         f.write(html_report)
     logger.info(f"Report saved to local file: {preview_path}")
 
     # 4. Handle Email Sending or Dry Run / CLI mode
     if dry_run or print_cli:
-        logger.info("DRY-RUN / PRINT Mode: Email sending skipped. You can open 'report_preview.html' in your browser to view the formatted report.")
+        logger.info(f"DRY-RUN / PRINT Mode: Email sending skipped. You can open '{out_file}' in your browser to view the formatted report.")
         return True
 
     # Validate SMTP configuration before sending
@@ -378,9 +426,9 @@ def run_pipeline(dry_run: bool = False, use_mock: bool = False, print_cli: bool 
 
     mailer = EmailSender(
         enable_threading=Config.ENABLE_EMAIL_THREADING,
-        thread_id=Config.EMAIL_THREAD_ID
+        thread_id=t_id
     )
-    subject = f"{Config.EMAIL_SUBJECT_PREFIX} Telemetry Status Report"
+    subject = f"{subj_prefix} Telemetry Status Report"
     
     # Attach Excel sheet to outgoing email
     attachments_to_send = [excel_file_path]
@@ -392,20 +440,23 @@ def run_pipeline(dry_run: bool = False, use_mock: bool = False, print_cli: bool 
         html_content=html_report,
         attachment_paths=attachments_to_send,
         enable_threading=Config.ENABLE_EMAIL_THREADING,
-        thread_id=Config.EMAIL_THREAD_ID
+        thread_id=t_id
     )
 
     if success:
-        logger.info("BBMP Panel Report job completed successfully!")
+        logger.info(f"{proj_name} Panel Report job completed successfully!")
     else:
-        logger.error("BBMP Panel Report job encountered email sending errors.")
+        logger.error(f"{proj_name} Panel Report job encountered email sending errors.")
         sys.exit(1)
 
     return success
 
 
 def main():
-    parser = argparse.ArgumentParser(description="BBMP ThingsBoard Panel Monitoring & Email Report Tool")
+    parser = argparse.ArgumentParser(description="BBMP & 5B Innovation ThingsBoard Panel Monitoring & Email Report Tool")
+    parser.add_argument("--project", type=str, default=None, help="Project name (e.g. 'bbmp', '5b_innovation')")
+    parser.add_argument("--customer-id", type=str, default=None, help="Target ThingsBoard Customer ID (UUID)")
+    parser.add_argument("--list-customers", action="store_true", help="List all available Customers and Customer IDs on ThingsBoard account")
     parser.add_argument("--print", "--cli", action="store_true", help="Fetch data and print summary directly in terminal without sending email")
     parser.add_argument("--dry-run", action="store_true", help="Fetch data and generate report preview without sending emails")
     parser.add_argument("--send-now", action="store_true", help="Fetch data and send email immediately")
@@ -414,6 +465,10 @@ def main():
     parser.add_argument("--output", type=str, default="report_preview.html", help="Local preview output filename")
 
     args = parser.parse_args()
+
+    if args.list_customers:
+        list_customers_cmd()
+        return
 
     override_recipients = None
     if args.to:
@@ -425,12 +480,29 @@ def main():
         dry_run_mode = True
 
     if args.send_now or args.dry_run or args.print or args.mock:
-        run_pipeline(dry_run=dry_run_mode, use_mock=args.mock, print_cli=args.print, output_file=args.output, override_recipients=override_recipients)
+        run_pipeline(
+            dry_run=dry_run_mode,
+            use_mock=args.mock,
+            print_cli=args.print,
+            output_file=args.output,
+            override_recipients=override_recipients,
+            project_name=args.project,
+            customer_id=args.customer_id
+        )
     else:
         # Default behavior if no flags provided: print terminal summary and save preview without sending email
         logger.info("No specific flag provided. Displaying terminal summary and saving local preview.")
-        run_pipeline(dry_run=True, use_mock=args.mock, print_cli=True, output_file=args.output, override_recipients=override_recipients)
+        run_pipeline(
+            dry_run=True,
+            use_mock=args.mock,
+            print_cli=True,
+            output_file=args.output,
+            override_recipients=override_recipients,
+            project_name=args.project,
+            customer_id=args.customer_id
+        )
 
 
 if __name__ == "__main__":
     main()
+

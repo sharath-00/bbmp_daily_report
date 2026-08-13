@@ -1,0 +1,44 @@
+name: 5B Innovation Panel Telemetry Report
+
+on:
+  workflow_dispatch: # Allows manual run anytime from GitHub Actions tab
+  repository_dispatch:
+    types: [run_5b_report]
+
+jobs:
+  run-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Execute 5B Innovation Daily Report Pipeline
+        env:
+          PROJECT_NAME: "5B Innovation"
+          THINGSBOARD_HOST: ${{ secrets.THINGSBOARD_HOST }}
+          THINGSBOARD_USERNAME: ${{ secrets.THINGSBOARD_USERNAME }}
+          THINGSBOARD_PASSWORD: ${{ secrets.THINGSBOARD_PASSWORD }}
+          THINGSBOARD_CUSTOMER_ID: ${{ secrets.TB_CUSTOMER_ID_5B || secrets.THINGSBOARD_CUSTOMER_ID }}
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USE_TLS: ${{ secrets.SMTP_USE_TLS }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS_5B || secrets.RECIPIENT_EMAILS }}
+          EMAIL_SUBJECT_PREFIX: ${{ secrets.EMAIL_SUBJECT_PREFIX_5B || '[5B Innovation Panel Report]' }}
+          ENABLE_EMAIL_THREADING: ${{ secrets.ENABLE_EMAIL_THREADING || 'true' }}
+          EMAIL_THREAD_ID: ${{ secrets.EMAIL_THREAD_ID_5B || '5b-innovation-panel-telemetry-report-thread@5b.local' }}
+        run: |
+          python main.py --project "5B Innovation" --send-now

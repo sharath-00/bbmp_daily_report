@@ -139,7 +139,7 @@ HTML_REPORT_TEMPLATE = """
     <div class="container">
         <div class="header">
             <h1>Schnell Smart Light Monitoring</h1>
-            <p>BBMP Panel Telemetry Report &bull; {{ generated_at }}</p>
+            <p>{{ project_name or 'BBMP' }} Panel Telemetry Report &bull; {{ generated_at }}</p>
         </div>
 
         <div class="content">
@@ -151,7 +151,7 @@ HTML_REPORT_TEMPLATE = """
                 </div>
                 <div class="kpi-card-cell" style="width: 20%;">
                     <div class="kpi-value" style="color: #2b6cb0;">{{ inst_summary.combined.total }}</div>
-                    <div class="kpi-label">Total BBMP Panels</div>
+                    <div class="kpi-label">Total {{ project_name or 'BBMP' }} Panels</div>
                 </div>
                 <div class="kpi-card-cell" style="width: 20%;">
                     <div class="kpi-value" style="color: #2f855a;">{{ inst_summary.combined.online }}</div>
@@ -174,7 +174,7 @@ HTML_REPORT_TEMPLATE = """
             </div>
 
             <!-- Panel Telemetry & Online/Offline Report Table -->
-            <div class="section-title">📍 BBMP Panel Live Telemetry & Status Report</div>
+            <div class="section-title">📍 {{ project_name or 'BBMP' }} Panel Live Telemetry & Status Report</div>
             <table>
                 <thead>
                     <tr>
@@ -325,10 +325,11 @@ def generate_html_report(data: Optional[Dict[str, Any]] = None) -> str:
         meter_c = iss.get("meter_comm_failure", 0)
         pen_pts = (off_p * 1) + (high_c * 10) + (mcb_t * 5) + (meter_c * 5)
         pen_pct = (pen_pts / total_p * 100.0) if total_p > 0 else 0.0
-        inst_summary["kpi_score"] = max(0.0, round(100.0 - pen_pct, 2))
+    proj_name = inst_summary.get("project_name", safe_data.get("project_name", "BBMP"))
 
     return template.render(
         generated_at=now_str,
+        project_name=proj_name,
         inst_summary=inst_summary,
         summary=safe_data.get("summary", {"total_devices": 0, "online_devices": 0, "offline_devices": 0, "active_alarms": 0}),
         devices=safe_data.get("devices", []),

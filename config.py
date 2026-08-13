@@ -41,6 +41,11 @@ class Config:
     _recipients_str = os.getenv("RECIPIENT_EMAILS", "")
     RECIPIENT_EMAILS = [r.strip() for r in _recipients_str.split(",") if r.strip()]
 
+    # Project & Customer Settings
+    PROJECT_NAME = os.getenv("PROJECT_NAME", "BBMP").strip()
+    TB_CUSTOMER_ID = os.getenv("THINGSBOARD_CUSTOMER_ID", "e2119df0-45c3-11f0-94dc-77130b2f47e9").strip()
+    TB_CUSTOMER_ID_5B = os.getenv("THINGSBOARD_CUSTOMER_ID_5B", "3e268290-3989-11f1-9e5f-85a6074555d7").strip()
+
     EMAIL_SUBJECT_PREFIX = os.getenv("EMAIL_SUBJECT_PREFIX", "[BBMP Panel Report]").strip()
     ENABLE_EMAIL_THREADING = os.getenv("ENABLE_EMAIL_THREADING", "true").lower() in ("true", "1", "yes")
     EMAIL_THREAD_ID = os.getenv("EMAIL_THREAD_ID", "bbmp-panel-telemetry-report-thread@bbmp.local").strip()
