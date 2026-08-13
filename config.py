@@ -41,14 +41,20 @@ class Config:
     _recipients_str = os.getenv("RECIPIENT_EMAILS", "")
     RECIPIENT_EMAILS = [r.strip() for r in _recipients_str.split(",") if r.strip()]
 
+    _recipients_5b_str = os.getenv("RECIPIENT_EMAILS_5B", os.getenv("RECIPIENT_EMAILS", ""))
+    RECIPIENT_EMAILS_5B = [r.strip() for r in _recipients_5b_str.split(",") if r.strip()]
+
     # Project & Customer Settings
     PROJECT_NAME = os.getenv("PROJECT_NAME", "BBMP").strip()
     TB_CUSTOMER_ID = os.getenv("THINGSBOARD_CUSTOMER_ID", "e2119df0-45c3-11f0-94dc-77130b2f47e9").strip()
     TB_CUSTOMER_ID_5B = os.getenv("THINGSBOARD_CUSTOMER_ID_5B", "3e268290-3989-11f1-9e5f-85a6074555d7").strip()
 
     EMAIL_SUBJECT_PREFIX = os.getenv("EMAIL_SUBJECT_PREFIX", "[BBMP Panel Report]").strip()
+    EMAIL_SUBJECT_PREFIX_5B = os.getenv("EMAIL_SUBJECT_PREFIX_5B", "[5B Innovation Panel Report]").strip()
     ENABLE_EMAIL_THREADING = os.getenv("ENABLE_EMAIL_THREADING", "true").lower() in ("true", "1", "yes")
+    ENABLE_EMAIL_THREADING_5B = os.getenv("ENABLE_EMAIL_THREADING_5B", "false").lower() in ("true", "1", "yes")
     EMAIL_THREAD_ID = os.getenv("EMAIL_THREAD_ID", "bbmp-panel-telemetry-report-thread@bbmp.local").strip()
+    EMAIL_THREAD_ID_5B = os.getenv("EMAIL_THREAD_ID_5B", "5b-innovation-panel-telemetry-report-thread@5b.local").strip()
 
     @classmethod
     def validate(cls, check_smtp: bool = True, check_tb: bool = True) -> list[str]:

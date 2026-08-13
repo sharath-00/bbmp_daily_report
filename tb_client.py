@@ -440,8 +440,10 @@ class ThingsBoardClient:
                 pass
 
             display_region = region_attr if region_attr else (zone_attr if zone_attr else "")
-            is_bom = "BOMMANAHALLI" in combined_str or "BOMMANAHALI" in combined_str or "BMH" in combined_str
-            is_east = "EAST" in combined_str or any(kw in combined_str for kw in ["SARVAGNA", "CVRAMAN", "PULAKESHI", "SHIVAJI", "HEBBAL", "SHANTHI"])
+            
+            is_bbmp_project = (proj_name == "BBMP")
+            is_bom = is_bbmp_project and ("BOMMANAHALLI" in combined_str or "BOMMANAHALI" in combined_str or "BMH" in combined_str)
+            is_east = is_bbmp_project and ("EAST" in combined_str or any(kw in combined_str for kw in ["SARVAGNA", "CVRAMAN", "PULAKESHI", "SHIVAJI", "HEBBAL", "SHANTHI"]))
 
             if is_bom:
                 category = "bommanahalli"

@@ -74,16 +74,17 @@ class EmailSender:
         current_msg_id = make_msgid(domain=domain)
 
         # Build MIME Message Structure
+        default_plain_text = f"Please enable HTML view to see the {subject}."
         if attachment_paths:
             msg = MIMEMultipart("mixed")
             body_part = MIMEMultipart("alternative")
-            plain_text = text_content or "Please enable HTML view to see the BBMP Panel Telemetry Report."
+            plain_text = text_content or default_plain_text
             body_part.attach(MIMEText(plain_text, "plain", "utf-8"))
             body_part.attach(MIMEText(html_content, "html", "utf-8"))
             msg.attach(body_part)
         else:
             msg = MIMEMultipart("alternative")
-            plain_text = text_content or "Please enable HTML view to see the BBMP Panel Telemetry Report."
+            plain_text = text_content or default_plain_text
             msg.attach(MIMEText(plain_text, "plain", "utf-8"))
             msg.attach(MIMEText(html_content, "html", "utf-8"))
 
@@ -104,7 +105,7 @@ class EmailSender:
             
             # Outlook / Exchange Thread-Topic header
             clean_topic = subject
-            for prefix in ["[BBMP Panel Report]", "Re:", "RE:", "FWD:", "Fwd:"]:
+            for prefix in ["[BBMP Panel Report]", "[5B Innovation Panel Report]", "[5B Innovations Panel Report]", "Re:", "RE:", "FWD:", "Fwd:"]:
                 clean_topic = clean_topic.replace(prefix, "").strip()
             msg["Thread-Topic"] = clean_topic or subject
             
@@ -156,7 +157,7 @@ class EmailSender:
             logger.info(f"Successfully sent email subject '{subject}' to {len(recipients)} recipients: {', '.join(recipients)}")
 
             if use_threading and root_msg_id:
-                self._save_thread_state(root_msg_id, current_msg_id)
+                self._save_thread_state(active_thread_id, root_msg_id, current_msg_id)
 
             return True
 
@@ -169,30 +170,42 @@ class EmailSender:
 
     def _get_thread_headers(self, thread_id: str) -> tuple:
         """
-        Retrieves root_msg_id and parent_msg_id for email threading.
-        Checks local state file if available, otherwise falls back to deterministic thread_id.
+        Retrieves root_msg_id and parent_msg_id for email threading keyed by thread_id.
         """
         formatted_thread_id = _format_msg_id(thread_id)
         if STATE_FILE_PATH.exists():
             try:
                 with open(STATE_FILE_PATH, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    root_id = data.get("root_msg_id") or formatted_thread_id
-                    last_id = data.get("last_msg_id") or formatted_thread_id
+                    t_data = data.get(thread_id, {})
+                    if not t_data and "root_msg_id" in data:
+                        t_data = data
+                    root_id = t_data.get("root_msg_id") or formatted_thread_id
+                    last_id = t_data.get("last_msg_id") or formatted_thread_id
                     return _format_msg_id(root_id), _format_msg_id(last_id)
             except Exception as e:
                 logger.warning(f"Could not read email thread state file: {e}")
         return formatted_thread_id, formatted_thread_id
 
-    def _save_thread_state(self, root_msg_id: str, sent_msg_id: str):
-        """Saves current thread state to local JSON file for continuity across runs."""
+    def _save_thread_state(self, thread_id: str, root_msg_id: str, sent_msg_id: str):
+        """Saves current thread state per thread_id to local JSON file for continuity across runs."""
         try:
-            state = {
+            data = {}
+            if STATE_FILE_PATH.exists():
+                try:
+                    with open(STATE_FILE_PATH, "r", encoding="utf-8") as f:
+                        loaded = json.load(f)
+                        if isinstance(loaded, dict):
+                            data = loaded
+                except Exception:
+                    data = {}
+            
+            data[thread_id] = {
                 "root_msg_id": root_msg_id,
                 "last_msg_id": sent_msg_id
             }
             with open(STATE_FILE_PATH, "w", encoding="utf-8") as f:
-                json.dump(state, f, indent=2)
-            logger.info(f"Updated thread state file with last_msg_id={sent_msg_id}")
+                json.dump(data, f, indent=2)
+            logger.info(f"Updated thread state file for '{thread_id}' with last_msg_id={sent_msg_id}")
         except Exception as e:
             logger.warning(f"Could not write email thread state file: {e}")

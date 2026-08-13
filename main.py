@@ -136,6 +136,8 @@ def print_terminal_summary(data):
         for r in regions:
             r_name = r.get("name", "Region")
             print(f"{r_name:<26} | {r.get('online', 0):<8} | {r.get('offline', 0):<8} | {r.get('offline_pf_today', 0):<12} | {r.get('offline_pf_prior', 0):<12} | {r.get('total', 0):<10}")
+    elif proj_name.upper() != "BBMP":
+        print(f"{proj_name:<26} | {comb.get('online', 0):<8} | {comb.get('offline', 0):<8} | {comb.get('offline_pf_today', 0):<12} | {comb.get('offline_pf_prior', 0):<12} | {comb.get('total', 0):<10}")
     else:
         print(f"{'Bommanahalli':<26} | {bom.get('online', 0):<8} | {bom.get('offline', 0):<8} | {bom.get('offline_pf_today', 0):<12} | {bom.get('offline_pf_prior', 0):<12} | {bom.get('total', 0):<10}")
         print(f"{'EAST':<26} | {east.get('online', 0):<8} | {east.get('offline', 0):<8} | {east.get('offline_pf_today', 0):<12} | {east.get('offline_pf_prior', 0):<12} | {east.get('total', 0):<10}")
@@ -197,8 +199,8 @@ def export_panel_issues_to_csv(data: dict, output_csv: str = "panel_issues_detai
     return str(csv_path)
 
 
-def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_details.xlsx") -> str:
-    """Exports granular breakdown of panels into separate Excel tabs per region (Bommanahalli, East)."""
+def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_details.xlsx", project_name: str = "BBMP") -> str:
+    """Exports granular breakdown of panels into Excel tabs (regional tabs for BBMP, single sheet for 5B Innovation)."""
     inst = data.get("installation_report", {})
     affected_panels = inst.get("affected_panels", [])
     excel_path = Path(__file__).resolve().parent / output_excel
@@ -207,22 +209,6 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
     # Remove default sheet
     default_sheet = wb.active
     wb.remove(default_sheet)
-
-    # Filter panels by region
-    bom_panels = []
-    east_panels = []
-    other_panels = []
-
-    for p in affected_panels:
-        if not p.get("active_issues"):
-            continue
-        reg_upper = str(p.get("region", "")).upper()
-        if "BOMMANAHALLI" in reg_upper or "BOMMANAHALI" in reg_upper or "BMH" in reg_upper:
-            bom_panels.append(p)
-        elif "EAST" in reg_upper:
-            east_panels.append(p)
-        else:
-            other_panels.append(p)
 
     # Header Style (Dark Blue Fill with Bold White Text)
     header_fill = PatternFill(start_color="2B6CB0", end_color="2B6CB0", fill_type="solid")
@@ -239,7 +225,7 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
 
     fieldnames = ["Panel Name", "Panel Label", "Region", "Zone Name", "Ward Name", "Status", "Days Offline", "Active Issues"]
 
-    def create_region_sheet(title, panels):
+    def create_sheet(title, panels):
         ws = wb.create_sheet(title=title)
         ws.append(fieldnames)
 
@@ -279,14 +265,38 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
             col_letter = get_column_letter(col[0].column)
             ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
 
-    # Create sheets for Bommanahalli and East
-    create_region_sheet("Bommanahalli", bom_panels)
-    create_region_sheet("East", east_panels)
-    if other_panels:
-        create_region_sheet("Other Regions", other_panels)
+    is_bbmp = (project_name.upper() == "BBMP")
+
+    if is_bbmp:
+        # Filter panels by region for BBMP
+        bom_panels = []
+        east_panels = []
+        other_panels = []
+
+        for p in affected_panels:
+            if not p.get("active_issues"):
+                continue
+            reg_upper = str(p.get("region", "")).upper()
+            if "BOMMANAHALLI" in reg_upper or "BOMMANAHALI" in reg_upper or "BMH" in reg_upper:
+                bom_panels.append(p)
+            elif "EAST" in reg_upper:
+                east_panels.append(p)
+            else:
+                other_panels.append(p)
+
+        create_sheet("Bommanahalli", bom_panels)
+        create_sheet("East", east_panels)
+        if other_panels:
+            create_sheet("Other Regions", other_panels)
+        logger.info(f"Exported BBMP detailed panel issues (Bommanahalli: {len(bom_panels)}, East: {len(east_panels)}) to Excel: {excel_path}")
+    else:
+        # 5B Innovation or non-BBMP project - Single dedicated sheet without Bommanahalli / East tabs
+        active_5b_panels = [p for p in affected_panels if p.get("active_issues")]
+        sheet_title = f"{project_name} Panel Issues" if len(f"{project_name} Panel Issues") <= 30 else "Panel Issues Details"
+        create_sheet(sheet_title, active_5b_panels)
+        logger.info(f"Exported {project_name} detailed panel issues ({len(active_5b_panels)} panels) to single sheet '{sheet_title}' Excel: {excel_path}")
 
     wb.save(excel_path)
-    logger.info(f"Exported detailed panel issues (Bommanahalli: {len(bom_panels)}, East: {len(east_panels)}) to Excel: {excel_path}")
     return str(excel_path)
 
 
@@ -326,20 +336,29 @@ def run_pipeline(
     """
     Main job function: Fetches data, displays terminal summary, generates HTML report, exports issue details Excel, and sends email or saves preview.
     """
-    proj_name = project_name or Config.PROJECT_NAME or "BBMP"
-    if "5B" in proj_name.upper() or "INNOVATION" in proj_name.upper():
+    raw_proj = str(project_name or Config.PROJECT_NAME or "BBMP").strip()
+    if "5B" in raw_proj.upper() or "INNOVATION" in raw_proj.upper():
         proj_name = "5B Innovation"
+    else:
+        proj_name = "BBMP"
 
     logger.info(f"=== Starting Panel Report Job for Project: {proj_name} ===")
 
-    recipients_to_use = override_recipients or Config.RECIPIENT_EMAILS
-    subj_prefix = subject_prefix or Config.EMAIL_SUBJECT_PREFIX
-    if subject_prefix is None and proj_name != "BBMP":
-        subj_prefix = f"[{proj_name} Panel Report]"
-    
-    t_id = thread_id or Config.EMAIL_THREAD_ID
-    if thread_id is None and proj_name != "BBMP":
-        t_id = f"{proj_name.lower().replace(' ', '-')}-panel-telemetry-report-thread@local"
+    if override_recipients:
+        recipients_to_use = override_recipients
+    elif proj_name != "BBMP":
+        recipients_to_use = Config.RECIPIENT_EMAILS_5B or Config.RECIPIENT_EMAILS
+    else:
+        recipients_to_use = Config.RECIPIENT_EMAILS
+
+    if proj_name != "BBMP":
+        subj_prefix = subject_prefix or Config.EMAIL_SUBJECT_PREFIX_5B
+        t_id = thread_id or Config.EMAIL_THREAD_ID_5B
+        enable_threading = Config.ENABLE_EMAIL_THREADING_5B
+    else:
+        subj_prefix = subject_prefix or Config.EMAIL_SUBJECT_PREFIX
+        t_id = thread_id or Config.EMAIL_THREAD_ID
+        enable_threading = Config.ENABLE_EMAIL_THREADING
 
     # 1. Fetch Data
     if use_mock:
@@ -352,6 +371,11 @@ def run_pipeline(
                 "penalty_points": 208,
                 "offline_gt_7_days": 18,
                 "offline_pf_gt_7_days": 24,
+                "regions": [
+                    {"name": "5B Innovations North Region", "online": 1250, "offline": 15, "offline_pf_today": 10, "offline_pf_prior": 15, "offline_pf": 25, "total": 1290},
+                    {"name": "5B Innovations Central Region", "online": 1820, "offline": 20, "offline_pf_today": 12, "offline_pf_prior": 18, "offline_pf": 30, "total": 1870},
+                    {"name": "5B Innovations South Region", "online": 905, "offline": 13, "offline_pf_today": 8, "offline_pf_prior": 12, "offline_pf": 20, "total": 938}
+                ],
                 "bommanahalli": {"online": 1408, "offline": 14, "offline_pf": 36, "total": 1458},
                 "east": {"online": 2567, "offline": 34, "offline_pf": 39, "total": 2640},
                 "combined": {"online": 3975, "offline": 48, "offline_pf": 75, "total": 4098},
@@ -399,7 +423,7 @@ def run_pipeline(
 
     # Export detailed issues to Excel (.xlsx)
     excel_filename = f"{proj_name.lower().replace(' ', '_')}_panel_issues_details.xlsx" if proj_name != "BBMP" else "panel_issues_details.xlsx"
-    excel_file_path = export_panel_issues_to_excel(data, output_excel=excel_filename)
+    excel_file_path = export_panel_issues_to_excel(data, output_excel=excel_filename, project_name=proj_name)
 
     # 2. Generate HTML Report
     logger.info("Generating HTML report...")
@@ -432,7 +456,7 @@ def run_pipeline(
         sys.exit(1)
 
     mailer = EmailSender(
-        enable_threading=Config.ENABLE_EMAIL_THREADING,
+        enable_threading=enable_threading,
         thread_id=t_id
     )
     subject = f"{subj_prefix} Telemetry Status Report"
@@ -446,7 +470,7 @@ def run_pipeline(
         subject=subject,
         html_content=html_report,
         attachment_paths=attachments_to_send,
-        enable_threading=Config.ENABLE_EMAIL_THREADING,
+        enable_threading=enable_threading,
         thread_id=t_id
     )
 
@@ -459,11 +483,102 @@ def run_pipeline(
     return success
 
 
+def inspect_project_regions_cmd(project_name: Optional[str] = None, customer_id: Optional[str] = None):
+    """Fetches and displays all unique regions, zones, wards, and panel counts for specified project/customer."""
+    proj_name = project_name or Config.PROJECT_NAME or "5B Innovations"
+    if "5B" in proj_name.upper() or "INNOVATION" in proj_name.upper():
+        proj_name = "5B Innovations"
+
+    logger.info(f"Inspecting regions and zones for project: {proj_name}...")
+    tb_client = ThingsBoardClient()
+    if tb_client.login():
+        target_cust_id = customer_id
+        if not target_cust_id:
+            if "5B" in proj_name.upper() or "INNOVATION" in proj_name.upper():
+                target_cust_id = Config.TB_CUSTOMER_ID_5B
+                if not target_cust_id:
+                    matched_cust = tb_client.find_customer_by_name("5B") or tb_client.find_customer_by_name("Innovation")
+                    if matched_cust:
+                        target_cust_id = matched_cust.get("id", {}).get("id")
+            if not target_cust_id:
+                target_cust_id = Config.TB_CUSTOMER_ID
+
+        devices = []
+        page = 0
+        while True:
+            url = f"{tb_client.host}/api/customer/{target_cust_id}/deviceInfos?pageSize=1000&page={page}"
+            res = tb_client.session.get(url, timeout=30)
+            if res.status_code != 200:
+                url = f"{tb_client.host}/api/customer/{target_cust_id}/devices?pageSize=1000&page={page}"
+                res = tb_client.session.get(url, timeout=30)
+            if res.status_code == 200:
+                data = res.json()
+                devs = data.get("data", [])
+                devices.extend(devs)
+                if not data.get("hasNext", False) or len(devs) == 0:
+                    break
+                page += 1
+            else:
+                break
+        
+        print("\n" + "="*90)
+        print(f"📍 {proj_name.upper()} REGIONS, ZONES & PANEL COUNT BREAKDOWN (Total: {len(devices)} panels)")
+        print("="*90)
+
+        regions_counter = {}
+        zones_counter = {}
+
+        def check_attr(dev):
+            dev_id = dev.get("id", {}).get("id")
+            reg = "NOT_SET"
+            zone = "NOT_SET"
+            ward = "NOT_SET"
+            try:
+                res_attr = tb_client.session.get(f"{tb_client.host}/api/plugins/telemetry/DEVICE/{dev_id}/values/attributes?keys=region,zoneName,wardName", timeout=5)
+                if res_attr.status_code == 200:
+                    for item in res_attr.json():
+                        k = item.get("key")
+                        v = item.get("value")
+                        if k == "region" and v:
+                            reg = str(v)
+                        elif k == "zoneName" and v:
+                            zone = str(v)
+                        elif k == "wardName" and v:
+                            ward = str(v)
+            except Exception:
+                pass
+            return reg, zone, ward
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=30) as executor:
+            futures = [executor.submit(check_attr, dev) for dev in devices]
+            for future in as_completed(futures):
+                reg, zone, ward = future.result()
+                regions_counter[reg] = regions_counter.get(reg, 0) + 1
+                zones_counter[zone] = zones_counter.get(zone, 0) + 1
+
+        print(f"\n--- REGIONS FOUND ({len(regions_counter)}) ---")
+        print(f"{'Region Attribute Value':<45} | {'Panel Count':<15}")
+        print("-" * 65)
+        for r_name, count in sorted(regions_counter.items(), key=lambda x: x[1], reverse=True):
+            print(f"{r_name:<45} | {count:<15}")
+
+        print(f"\n--- ZONES FOUND ({len(zones_counter)}) ---")
+        print(f"{'Zone Attribute Value':<45} | {'Panel Count':<15}")
+        print("-" * 65)
+        for z_name, count in sorted(zones_counter.items(), key=lambda x: x[1], reverse=True):
+            print(f"{z_name:<45} | {count:<15}")
+        print("="*90 + "\n")
+    else:
+        logger.error("Failed to authenticate with ThingsBoard API.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="BBMP & 5B Innovation ThingsBoard Panel Monitoring & Email Report Tool")
     parser.add_argument("--project", type=str, default=None, help="Project name (e.g. 'bbmp', '5b_innovation')")
     parser.add_argument("--customer-id", type=str, default=None, help="Target ThingsBoard Customer ID (UUID)")
     parser.add_argument("--list-customers", action="store_true", help="List all available Customers and Customer IDs on ThingsBoard account")
+    parser.add_argument("--inspect-regions", action="store_true", help="Inspect all unique regions and zones for specified project")
     parser.add_argument("--print", "--cli", action="store_true", help="Fetch data and print summary directly in terminal without sending email")
     parser.add_argument("--dry-run", action="store_true", help="Fetch data and generate report preview without sending emails")
     parser.add_argument("--send-now", action="store_true", help="Fetch data and send email immediately")
@@ -477,6 +592,10 @@ def main():
         list_customers_cmd()
         return
 
+    if args.inspect_regions:
+        inspect_project_regions_cmd(project_name=args.project, customer_id=args.customer_id)
+        return
+
     override_recipients = None
     if args.to:
         override_recipients = [r.strip() for r in args.to.split(",") if r.strip()]
@@ -486,28 +605,48 @@ def main():
     if args.mock and not args.send_now:
         dry_run_mode = True
 
-    if args.send_now or args.dry_run or args.print or args.mock:
-        run_pipeline(
+    projects_to_run = []
+    if args.project:
+        p_arg = args.project.strip().lower()
+        if p_arg in ("all", "both"):
+            projects_to_run = ["BBMP", "5B Innovation"]
+        elif "5b" in p_arg or "innovation" in p_arg:
+            projects_to_run = ["5B Innovation"]
+        else:
+            projects_to_run = [args.project]
+    else:
+        env_proj = (Config.PROJECT_NAME or "BBMP").strip()
+        if env_proj.lower() in ("all", "both"):
+            projects_to_run = ["BBMP", "5B Innovation"]
+        elif "5b" in env_proj.lower() or "innovation" in env_proj.lower():
+            projects_to_run = ["5B Innovation"]
+        elif args.send_now:
+            # When --send-now is triggered without explicit project flag, send separate emails for both projects
+            projects_to_run = ["BBMP", "5B Innovation"]
+        else:
+            projects_to_run = ["BBMP"]
+
+    logger.info(f"Projects queued for report execution: {', '.join(projects_to_run)}")
+
+    results = []
+    for proj in projects_to_run:
+        out_f = args.output
+        if out_f == "report_preview.html" and proj != "BBMP":
+            out_f = f"{proj.lower().replace(' ', '_')}_report_preview.html"
+
+        res = run_pipeline(
             dry_run=dry_run_mode,
             use_mock=args.mock,
-            print_cli=args.print,
-            output_file=args.output,
+            print_cli=args.print or (len(projects_to_run) == 1 and not (args.send_now or args.dry_run)),
+            output_file=out_f,
             override_recipients=override_recipients,
-            project_name=args.project,
-            customer_id=args.customer_id
+            project_name=proj,
+            customer_id=args.customer_id if len(projects_to_run) == 1 else None
         )
-    else:
-        # Default behavior if no flags provided: print terminal summary and save preview without sending email
-        logger.info("No specific flag provided. Displaying terminal summary and saving local preview.")
-        run_pipeline(
-            dry_run=True,
-            use_mock=args.mock,
-            print_cli=True,
-            output_file=args.output,
-            override_recipients=override_recipients,
-            project_name=args.project,
-            customer_id=args.customer_id
-        )
+        results.append(res)
+
+    if not all(results):
+        sys.exit(1)
 
 
 if __name__ == "__main__":

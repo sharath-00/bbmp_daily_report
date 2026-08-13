@@ -11,9 +11,9 @@ env/
 venv/
 
 # Reports & Temp Preview
-report_preview.html
-panel_issues_details.csv
-panel_issues_details.xlsx
+*.html
+*.xlsx
+*.csv
 .email_thread_state.json
 
 # IDE Configs
