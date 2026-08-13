@@ -144,6 +144,10 @@ def print_terminal_summary(data):
     print(f"{'Low Voltage:':<20} {issues.get('low_voltage', 0):<7} | {'High Current / Power Theft:':<26} {issues.get('high_current', 0):<5} | {'Relay Failure:':<20} {issues.get('relay_failure', 0):<7}")
     print(f"{'High Voltage:':<20} {issues.get('high_voltage', 0):<7} | {'Low Current:':<26} {issues.get('low_current', 0):<5} | {'MeterComm Failure:':<20} {issues.get('meter_comm_failure', 0):<7}")
     print(f"{'':<28} | {'MCB Trip:':<26} {issues.get('mcb_trip', 0):<5} | {'':<28}")
+    print("-" * 95)
+    print(f"🚨 LONG-TERM OFFLINE BREAKDOWN (> 7 DAYS):")
+    print(f"  • Offline Panels (> 7 Days):    {inst.get('offline_gt_7_days', issues.get('offline_gt_7_days', 0))}")
+    print(f"  • Offline PF Panels (> 7 Days): {inst.get('offline_pf_gt_7_days', issues.get('offline_pf_gt_7_days', 0))}")
     print("="*95 + "\n")
 
 
@@ -295,13 +299,16 @@ def run_pipeline(dry_run: bool = False, use_mock: bool = False, print_cli: bool 
                 "performance_score": 98.83,
                 "kpi_score": 94.92,
                 "penalty_points": 208,
+                "offline_gt_7_days": 18,
+                "offline_pf_gt_7_days": 24,
                 "bommanahalli": {"online": 1408, "offline": 14, "offline_pf": 36, "total": 1458},
                 "east": {"online": 2567, "offline": 34, "offline_pf": 39, "total": 2640},
                 "combined": {"online": 3975, "offline": 48, "offline_pf": 75, "total": 4098},
                 "issues": {
                     "low_voltage": 7, "high_voltage": 3, "power_failure": 179,
                     "high_current": 5, "low_current": 7, "mcb_trip": 22,
-                    "relay_failure": 0, "meter_comm_failure": 0, "manual_operation": 0, "panel_door_open": 21
+                    "relay_failure": 0, "meter_comm_failure": 0, "manual_operation": 0, "panel_door_open": 21,
+                    "offline_gt_7_days": 18, "offline_pf_gt_7_days": 24
                 },
                 "affected_panels": [
                     {"id": "dev-101", "name": "Panel-BBMP-BMH-001", "label": "Silk Board Flyover", "region": "BOMMANAHALLI", "zone": "Bommanahalli", "ward": "HSR Ward 174", "status": "ONLINE", "days_offline": "-", "active_issues": ["Low Voltage"]},

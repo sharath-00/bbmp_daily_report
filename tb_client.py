@@ -276,7 +276,9 @@ class ThingsBoardClient:
             "relay_failure": 0,
             "meter_comm_failure": 0,
             "manual_operation": 0,
-            "panel_door_open": 0
+            "panel_door_open": 0,
+            "offline_gt_7_days": 0,
+            "offline_pf_gt_7_days": 0
         }
 
         def decode_fault_alerts(fault_val):
@@ -403,6 +405,9 @@ class ThingsBoardClient:
             elif is_east:
                 category = "east"
 
+            is_offline_gt_7 = False
+            is_offline_pf_gt_7 = False
+
             # Calculate offline duration
             offline_days_str = "-" if status == "ONLINE" else "-"
             if status != "ONLINE":
@@ -423,6 +428,12 @@ class ThingsBoardClient:
                         offline_days_str = f"{hours} Hours"
                     else:
                         offline_days_str = f"{int(offline_days_val)} Days" if offline_days_val.is_integer() else f"{offline_days_val} Days"
+
+                    if offline_days_val > 7.0:
+                        if status == "OFFLINE":
+                            is_offline_gt_7 = True
+                        elif status in ("OFFLINE_PF_TODAY", "OFFLINE_PF_PRIOR"):
+                            is_offline_pf_gt_7 = True
                 else:
                     offline_days_str = "1+ Days" if status == "OFFLINE_PF_PRIOR" else "Today"
 
@@ -436,6 +447,11 @@ class ThingsBoardClient:
                 "meter_comm_failure": "MeterComm Failure"
             }
             active_issues_list = [label for key, label in SCREENSHOT_ISSUES_MAP.items() if dev_issues.get(key)]
+            if is_offline_gt_7:
+                active_issues_list.append("Offline (>7 Days)")
+            if is_offline_pf_gt_7:
+                active_issues_list.append("Offline PF (>7 Days)")
+
             panel_info = {
                 "id": dev_id,
                 "name": str(dev.get("name", "")),
@@ -449,16 +465,23 @@ class ThingsBoardClient:
                 "dev_issues": dev_issues
             }
 
-            return category, status, dev_issues, panel_info
+            return category, status, dev_issues, panel_info, is_offline_gt_7, is_offline_pf_gt_7
 
         logger.info(f"Processing {len(devices)} devices using 30 parallel workers with exact Dashboard formula...")
 
         affected_panels = []
+        offline_gt_7_count = 0
+        offline_pf_gt_7_count = 0
 
         with ThreadPoolExecutor(max_workers=30) as executor:
             futures = [executor.submit(process_device, dev) for dev in devices]
             for future in as_completed(futures):
-                category, status, dev_issues, panel_info = future.result()
+                category, status, dev_issues, panel_info, is_off_gt_7, is_off_pf_gt_7 = future.result()
+
+                if is_off_gt_7:
+                    offline_gt_7_count += 1
+                if is_off_pf_gt_7:
+                    offline_pf_gt_7_count += 1
 
                 for k, has_issue in dev_issues.items():
                     if has_issue:
@@ -523,12 +546,17 @@ class ThingsBoardClient:
         # Panel Performance Score formula requested: (online panels + offline (pf) that occurred today) / total panels * 100
         performance_score = round(((combined_online + combined_offline_pf_today) / combined_total * 100.0), 2) if combined_total > 0 else 0.0
 
+        issues_summary["offline_gt_7_days"] = offline_gt_7_count
+        issues_summary["offline_pf_gt_7_days"] = offline_pf_gt_7_count
+
         return {
             "customer": "Bangalore (BBMP)",
             "performance_score": performance_score,
             "panel_performance_score": performance_score,
             "kpi_score": kpi_score,
             "penalty_points": penalty_points,
+            "offline_gt_7_days": offline_gt_7_count,
+            "offline_pf_gt_7_days": offline_pf_gt_7_count,
             "bommanahalli": {
                 "online": bom_online,
                 "offline": bom_offline,

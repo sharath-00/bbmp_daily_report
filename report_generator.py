@@ -212,7 +212,7 @@ HTML_REPORT_TEMPLATE = """
 
             <!-- Panel Issues Breakdown (O&M Dashboard) -->
             <div class="section-title">⚠️ Panel Issues Breakdown (O&M Dashboard)</div>
-            <table style="width: 100%; border-spacing: 12px; border-collapse: separate; margin-bottom: 20px;">
+            <table style="width: 100%; border-spacing: 12px; border-collapse: separate; margin-bottom: 12px;">
                 <tr>
                     <td style="width: 33.33%; vertical-align: top; background: #fffaf0; border: 1px solid #feebc8; border-radius: 8px; padding: 15px;">
                         <h4 style="margin: 0 0 10px 0; color: #744210; border-bottom: 1px solid #fbd38d; padding-bottom: 5px; font-size: 14px;">⚡ Input Issues</h4>
@@ -235,6 +235,34 @@ HTML_REPORT_TEMPLATE = """
                             <tr><td style="padding: 4px 0;">Relay Failure</td><td style="text-align: right; font-weight: bold; color: #2b6cb0;">{{ inst_summary.issues.relay_failure }}</td></tr>
                             <tr><td style="padding: 4px 0;">MeterComm Failure</td><td style="text-align: right; font-weight: bold; color: #2b6cb0;">{{ inst_summary.issues.meter_comm_failure }}</td></tr>
                         </table>
+                    </td>
+                </tr>
+            </table>
+
+            <!-- Long-Term Offline Cards (> 7 Days) -->
+            <table style="width: 100%; border-spacing: 12px; border-collapse: separate; margin-bottom: 20px;">
+                <tr>
+                    <td style="width: 50%; vertical-align: top; background: #fff5f5; border: 1px solid #feb2b2; border-left: 5px solid #e53e3e; border-radius: 8px; padding: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                        <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #9b2c2c; margin-bottom: 4px;">
+                            🔴 Offline Panels (> 7 Days)
+                        </div>
+                        <div style="font-size: 26px; font-weight: 800; color: #9b2c2c; line-height: 1.1; margin-bottom: 4px;">
+                            {{ inst_summary.offline_gt_7_days }}
+                        </div>
+                        <div style="font-size: 12px; color: #742a2a; font-weight: 500;">
+                            Panels in continuous offline mode for more than 7 days
+                        </div>
+                    </td>
+                    <td style="width: 50%; vertical-align: top; background: #fffaf0; border: 1px solid #fbd38d; border-left: 5px solid #dd6b20; border-radius: 8px; padding: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                        <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #9c4221; margin-bottom: 4px;">
+                            🟠 Offline PF Panels (> 7 Days)
+                        </div>
+                        <div style="font-size: 26px; font-weight: 800; color: #c05621; line-height: 1.1; margin-bottom: 4px;">
+                            {{ inst_summary.offline_pf_gt_7_days }}
+                        </div>
+                        <div style="font-size: 12px; color: #744210; font-weight: 500;">
+                            Power failure panels in offline mode for more than 7 days
+                        </div>
                     </td>
                 </tr>
             </table>
@@ -262,12 +290,21 @@ def generate_html_report(data: Optional[Dict[str, Any]] = None) -> str:
         "bommanahalli": {"online": 1408, "offline": 14, "offline_pf": 36, "total": 1458},
         "east": {"online": 2567, "offline": 34, "offline_pf": 39, "total": 2640},
         "combined": {"online": 3975, "offline": 48, "offline_pf": 75, "total": 4098},
+        "offline_gt_7_days": 18,
+        "offline_pf_gt_7_days": 24,
         "issues": {
             "low_voltage": 7, "high_voltage": 3, "power_failure": 179,
             "high_current": 5, "low_current": 7, "mcb_trip": 22,
-            "relay_failure": 0, "meter_comm_failure": 0, "manual_operation": 0, "panel_door_open": 21
+            "relay_failure": 0, "meter_comm_failure": 0, "manual_operation": 0, "panel_door_open": 21,
+            "offline_gt_7_days": 18, "offline_pf_gt_7_days": 24
         }
     })
+
+    iss = inst_summary.get("issues", {})
+    if "offline_gt_7_days" not in inst_summary or inst_summary.get("offline_gt_7_days") is None:
+        inst_summary["offline_gt_7_days"] = iss.get("offline_gt_7_days", 18)
+    if "offline_pf_gt_7_days" not in inst_summary or inst_summary.get("offline_pf_gt_7_days") is None:
+        inst_summary["offline_pf_gt_7_days"] = iss.get("offline_pf_gt_7_days", 24)
 
     # Performance score reflects (online panels + offline (pf) that occurred today) / total panels * 100
     comb = inst_summary.get("combined", {})
@@ -283,7 +320,6 @@ def generate_html_report(data: Optional[Dict[str, Any]] = None) -> str:
     if "kpi_score" not in inst_summary or inst_summary.get("kpi_score") is None:
         total_p = comb.get("total", 4098) if comb else 4098
         off_p = comb.get("offline", 0) if comb else 0
-        iss = inst_summary.get("issues", {})
         high_c = iss.get("high_current", 0)
         mcb_t = iss.get("mcb_trip", 0)
         meter_c = iss.get("meter_comm_failure", 0)
