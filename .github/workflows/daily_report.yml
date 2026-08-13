@@ -39,4 +39,4 @@ jobs:
           ENABLE_EMAIL_THREADING: ${{ secrets.ENABLE_EMAIL_THREADING || 'true' }}
           EMAIL_THREAD_ID: ${{ secrets.EMAIL_THREAD_ID || 'bbmp-panel-telemetry-report-thread@bbmp.local' }}
         run: |
-          python main.py --send-now
+          python main.py --project "BBMP" --send-now
