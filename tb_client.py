@@ -378,15 +378,29 @@ class ThingsBoardClient:
             }
             
             # 1. Fetch exact dashboard timeseries keys (systime, pkt, fault) for 100% dashboard match
+            systime_val = None
+            pkt_val = None
+            pkt_ts = 0
+            fault_val = None
+
             try:
                 r_ts = self.session.get(f"{self.host}/api/plugins/telemetry/DEVICE/{dev_id}/values/timeseries?keys=systime,pkt,fault", timeout=5)
                 if r_ts.status_code == 200:
                     ts_data = r_ts.json()
-                    systime_val = ts_data.get("systime", [{}])[0].get("value") if "systime" in ts_data else None
-                    pkt_entry = ts_data.get("pkt", [{}])[0] if "pkt" in ts_data else {}
-                    pkt_val = pkt_entry.get("value") if isinstance(pkt_entry, dict) else None
-                    pkt_ts = pkt_entry.get("ts", 0) if isinstance(pkt_entry, dict) else 0
-                    fault_val = ts_data.get("fault", [{}])[0].get("value") if "fault" in ts_data else None
+                    if isinstance(ts_data, dict):
+                        systime_list = ts_data.get("systime")
+                        if isinstance(systime_list, list) and len(systime_list) > 0 and isinstance(systime_list[0], dict):
+                            systime_val = systime_list[0].get("value")
+
+                        pkt_list = ts_data.get("pkt")
+                        if isinstance(pkt_list, list) and len(pkt_list) > 0 and isinstance(pkt_list[0], dict):
+                            pkt_entry = pkt_list[0]
+                            pkt_val = pkt_entry.get("value")
+                            pkt_ts = pkt_entry.get("ts", 0)
+
+                        fault_list = ts_data.get("fault")
+                        if isinstance(fault_list, list) and len(fault_list) > 0 and isinstance(fault_list[0], dict):
+                            fault_val = fault_list[0].get("value")
                     
                     # EXACT DASHBOARD JAVASCRIPT FORMULA FROM O&M DASHBOARD
                     if str(pkt_val) == "8":
