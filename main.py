@@ -339,6 +339,7 @@ def run_pipeline(
                 logger.error(f"Data fetching failed for project '{proj_name}' (0 panels retrieved). Aborting email report sending to prevent sending empty report.")
                 raise RuntimeError(f"Data fetching failed for project '{proj_name}': 0 panels retrieved.")
 
+            alarms = tb_client.get_active_alarms()
             data = {
                 "installation_report": inst_report,
                 "alarms": alarms,
