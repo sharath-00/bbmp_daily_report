@@ -173,7 +173,7 @@ def export_panel_issues_to_csv(data: dict, output_csv: str = "panel_issues_detai
     affected_panels = inst.get("affected_panels", [])
     csv_path = Path(__file__).resolve().parent / output_csv
     
-    fieldnames = ["Device ID", "Panel Name", "Panel Label", "Region", "Zone Name", "Ward Name", "Status", "Active Issues"]
+    fieldnames = ["Device ID", "Panel Name", "Panel Label", "Region", "Zone Name", "Ward Name", "Status", "Last Received Data Date", "Days Offline", "Active Issues", "Lat / Lon"]
     
     exported_count = 0
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
@@ -191,7 +191,10 @@ def export_panel_issues_to_csv(data: dict, output_csv: str = "panel_issues_detai
                 p.get("zone", ""),
                 p.get("ward", ""),
                 p.get("status", ""),
-                ", ".join(active_issues)
+                p.get("last_received_date", "-"),
+                p.get("days_offline", "-"),
+                ", ".join(active_issues),
+                p.get("lat_lon", "-")
             ])
             exported_count += 1
             
@@ -223,7 +226,7 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
     data_font = Font(name="Calibri", size=10)
     data_alignment = Alignment(horizontal="left", vertical="center")
 
-    fieldnames = ["Panel Name", "Panel Label", "Region", "Zone Name", "Ward Name", "Status", "Days Offline", "Active Issues"]
+    fieldnames = ["Panel Name", "Panel Label", "Region", "Zone Name", "Ward Name", "Status", "Last Received Data Date", "Days Offline", "Active Issues", "Lat / Lon"]
 
     def create_sheet(title, panels):
         ws = wb.create_sheet(title=title)
@@ -246,13 +249,15 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
                 p.get("zone", ""),
                 p.get("ward", ""),
                 p.get("status", ""),
+                p.get("last_received_date", "-"),
                 p.get("days_offline", "-"),
-                ", ".join(p.get("active_issues", []))
+                ", ".join(p.get("active_issues", [])),
+                p.get("lat_lon", "-")
             ])
             for col_idx, cell in enumerate(ws[row_idx], start=1):
                 cell.font = data_font
                 cell.border = thin_border
-                if col_idx in (3, 6, 7): # Region, Status & Days Offline centered
+                if col_idx in (3, 6, 7, 8, 10): # Region, Status, Last Received Data Date, Days Offline & Lat / Lon centered
                     cell.alignment = Alignment(horizontal="center", vertical="center")
                 else:
                     cell.alignment = data_alignment

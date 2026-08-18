@@ -435,9 +435,13 @@ class ThingsBoardClient:
             region_attr = ""
             zone_attr = ""
             ward_attr = ""
-            # 2. Fetch region, zoneName, wardName attributes for categorization
+            slat_attr = ""
+            slon_attr = ""
+            lat_attr = ""
+            lon_attr = ""
+            # 2. Fetch region, zoneName, wardName, slatitude, slongitude, latitude, longitude attributes for categorization and report
             try:
-                r_attr = self.session.get(f"{self.host}/api/plugins/telemetry/DEVICE/{dev_id}/values/attributes?keys=region,zoneName,wardName", timeout=5)
+                r_attr = self.session.get(f"{self.host}/api/plugins/telemetry/DEVICE/{dev_id}/values/attributes?keys=region,zoneName,wardName,slatitude,slongitude,latitude,longitude,slat,slon,lat,lon", timeout=5)
                 if r_attr.status_code == 200:
                     for item in r_attr.json():
                         k = item.get("key")
@@ -448,10 +452,47 @@ class ThingsBoardClient:
                             zone_attr = str(v)
                         elif k == "wardName":
                             ward_attr = str(v)
+                        elif k in ("slatitude", "slat") and v is not None:
+                            slat_attr = str(v)
+                        elif k in ("slongitude", "slon") and v is not None:
+                            slon_attr = str(v)
+                        elif k in ("latitude", "lat") and v is not None:
+                            lat_attr = str(v)
+                        elif k in ("longitude", "lon") and v is not None:
+                            lon_attr = str(v)
                         if k in ("region", "zoneName", "wardName") and v:
                             combined_str += " " + str(v).upper()
             except Exception:
                 pass
+
+            # If surveyed slatitude / slongitude not on device attributes, check related ASSET
+            if not slat_attr or not slon_attr:
+                try:
+                    r_rel = self.session.get(f"{self.host}/api/relations/info?toId={dev_id}&toType=DEVICE", timeout=3)
+                    if r_rel.status_code == 200:
+                        for rel in r_rel.json():
+                            if rel.get("from", {}).get("entityType") == "ASSET":
+                                aid = rel.get("from", {}).get("id")
+                                r_aattr = self.session.get(f"{self.host}/api/plugins/telemetry/ASSET/{aid}/values/attributes?keys=slatitude,slongitude,slat,slon,latitude,longitude", timeout=3)
+                                if r_aattr.status_code == 200:
+                                    for item in r_aattr.json():
+                                        k = item.get("key")
+                                        v = item.get("value")
+                                        if k in ("slatitude", "slat") and v is not None and not slat_attr:
+                                            slat_attr = str(v)
+                                        elif k in ("slongitude", "slon") and v is not None and not slon_attr:
+                                            slon_attr = str(v)
+                                        elif k in ("latitude", "lat") and v is not None and not lat_attr:
+                                            lat_attr = str(v)
+                                        elif k in ("longitude", "lon") and v is not None and not lon_attr:
+                                            lon_attr = str(v)
+                                break
+                except Exception:
+                    pass
+
+            final_lat = slat_attr if slat_attr else lat_attr
+            final_lon = slon_attr if slon_attr else lon_attr
+            lat_lon_str = f"{final_lat}, {final_lon}" if (final_lat and final_lon) else "-"
 
             display_region = region_attr if region_attr else (zone_attr if zone_attr else "")
             
@@ -475,26 +516,35 @@ class ThingsBoardClient:
             is_offline_gt_7 = False
             is_offline_pf_gt_7 = False
 
-            # Calculate offline duration
+            # Determine last received timestamp for data date
+            last_ts_sec = None
+            if status in ("OFFLINE_PF_TODAY", "OFFLINE_PF_PRIOR") and pkt_ts > 0:
+                last_ts_sec = pkt_ts / 1000.0
+            elif systime_val is not None:
+                try:
+                    last_ts_sec = float(systime_val)
+                except Exception:
+                    pass
+            if (last_ts_sec is None or last_ts_sec <= 0) and pkt_ts > 0:
+                last_ts_sec = pkt_ts / 1000.0
+
+            if last_ts_sec and last_ts_sec > 0:
+                last_received_date = datetime.fromtimestamp(last_ts_sec).strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                last_received_date = "-"
+
+            # Calculate rounded offline duration
             offline_days_str = "-" if status == "ONLINE" else "-"
             if status != "ONLINE":
-                last_ts_sec = None
-                if status in ("OFFLINE_PF_TODAY", "OFFLINE_PF_PRIOR") and pkt_ts > 0:
-                    last_ts_sec = pkt_ts / 1000.0
-                elif systime_val is not None:
-                    try:
-                        last_ts_sec = float(systime_val)
-                    except Exception:
-                        pass
-                
                 if last_ts_sec and last_ts_sec > 0:
                     diff_sec = max(0, now_ts_sec - last_ts_sec)
-                    offline_days_val = round(diff_sec / 86400.0, 1)
-                    if offline_days_val < 1.0:
+                    offline_days_val = diff_sec / 86400.0
+                    rounded_days = int(round(offline_days_val))
+                    if rounded_days == 0:
                         hours = max(1, int(diff_sec // 3600))
                         offline_days_str = f"{hours} Hours"
                     else:
-                        offline_days_str = f"{int(offline_days_val)} Days" if offline_days_val.is_integer() else f"{offline_days_val} Days"
+                        offline_days_str = f"{rounded_days} Days"
 
                     if offline_days_val > 7.0:
                         if status == "OFFLINE":
@@ -528,8 +578,10 @@ class ThingsBoardClient:
                 "zone": zone_attr if zone_attr else "-",
                 "ward": ward_attr if ward_attr else "-",
                 "status": status,
+                "last_received_date": last_received_date,
                 "days_offline": offline_days_str,
                 "active_issues": active_issues_list,
+                "lat_lon": lat_lon_str,
                 "dev_issues": dev_issues
             }
 
