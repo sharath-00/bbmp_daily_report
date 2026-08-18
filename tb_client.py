@@ -21,8 +21,8 @@ class ThingsBoardClient:
         self.session.mount("https://", adapter)
         self.session.mount("http://", adapter)
 
-    def login(self) -> bool:
-        """Authenticate with ThingsBoard REST API and retrieve JWT token."""
+    def login(self, max_retries: int = 3, retry_delay: float = 3.0) -> bool:
+        """Authenticate with ThingsBoard REST API and retrieve JWT token with retry support."""
         url = f"{self.host}/api/auth/login"
         payload = {
             "username": self.username,
@@ -31,21 +31,27 @@ class ThingsBoardClient:
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         
         logger.info(f"Connecting to ThingsBoard at {self.host}...")
-        try:
-            response = self.session.post(url, json=payload, headers=headers, timeout=15)
-            if response.status_code == 200:
-                data = response.json()
-                self.token = data.get("token")
-                self.refresh_token = data.get("refreshToken")
-                self.session.headers.update({"X-Authorization": f"Bearer {self.token}"})
-                logger.info("Successfully authenticated with ThingsBoard API.")
-                return True
-            else:
-                logger.error(f"Login failed (HTTP {response.status_code}): {response.text}")
-                return False
-        except Exception as e:
-            logger.error(f"Failed to connect to ThingsBoard at {url}: {e}")
-            return False
+        for attempt in range(1, max_retries + 1):
+            try:
+                response = self.session.post(url, json=payload, headers=headers, timeout=20)
+                if response.status_code == 200:
+                    data = response.json()
+                    self.token = data.get("token")
+                    self.refresh_token = data.get("refreshToken")
+                    self.session.headers.update({"X-Authorization": f"Bearer {self.token}"})
+                    logger.info("Successfully authenticated with ThingsBoard API.")
+                    return True
+                else:
+                    logger.error(f"Login failed (HTTP {response.status_code}): {response.text}")
+                    if attempt < max_retries:
+                        time.sleep(retry_delay)
+            except Exception as e:
+                logger.warning(f"Attempt {attempt}/{max_retries} failed to connect to ThingsBoard at {url}: {e}")
+                if attempt < max_retries:
+                    time.sleep(retry_delay)
+                else:
+                    logger.error(f"All {max_retries} connection attempts to ThingsBoard failed.")
+        return False
 
     def _ensure_authenticated(self):
         if not self.token:

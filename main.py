@@ -14,92 +14,48 @@ from mail_sender import EmailSender
 logger = logging.getLogger("BBMP_Panel_Report.Main")
 
 
-def get_mock_panel_data():
-    """Generates realistic mock data for testing and preview purposes."""
+def get_mock_panel_data(project_name: str = "BBMP"):
+    """Generates realistic mock installation report data for testing and preview purposes."""
+    is_bbmp = (project_name.upper() == "BBMP")
+    proj = "BBMP" if is_bbmp else "5B Innovation"
+    
+    regions = [
+        {"name": f"{proj} North Region", "online": 1250, "offline": 15, "offline_pf_today": 10, "offline_pf_prior": 15, "offline_pf": 25, "total": 1290},
+        {"name": f"{proj} Central Region", "online": 1820, "offline": 20, "offline_pf_today": 12, "offline_pf_prior": 18, "offline_pf": 30, "total": 1870},
+        {"name": f"{proj} South Region", "online": 905, "offline": 13, "offline_pf_today": 8, "offline_pf_prior": 12, "offline_pf": 20, "total": 938}
+    ] if not is_bbmp else []
+
     return {
-        "summary": {
-            "total_devices": 5,
-            "online_devices": 4,
-            "offline_devices": 1,
-            "active_alarms": 1
+        "installation_report": {
+            "project_name": proj,
+            "performance_score": 98.83,
+            "kpi_score": 94.92,
+            "penalty_points": 208,
+            "offline_gt_7_days": 18,
+            "offline_pf_gt_7_days": 24,
+            "total_panels": 4098,
+            "regions": regions,
+            "bommanahalli": {"online": 1408, "offline": 14, "offline_pf_today": 12, "offline_pf_prior": 24, "offline_pf": 36, "total": 1458},
+            "east": {"online": 2567, "offline": 34, "offline_pf_today": 15, "offline_pf_prior": 24, "offline_pf": 39, "total": 2640},
+            "combined": {"online": 3975, "offline": 48, "offline_pf_today": 27, "offline_pf_prior": 48, "offline_pf": 75, "total": 4098},
+            "issues": {
+                "low_voltage": 7, "high_voltage": 3, "power_failure": 179,
+                "high_current": 5, "low_current": 7, "mcb_trip": 22,
+                "relay_failure": 0, "meter_comm_failure": 0, "manual_operation": 0, "panel_door_open": 21,
+                "offline_gt_7_days": 18, "offline_pf_gt_7_days": 24
+            },
+            "affected_panels": [
+                {"id": "dev-101", "name": f"Panel-{proj}-001", "label": "Main Sector 1", "region": "NORTH", "zone": "Zone A", "ward": "Ward 10", "status": "ONLINE", "last_received_date": "2026-08-18 11:59:45", "days_offline": "-", "active_issues": ["Low Voltage"], "lat_lon": "12.97391, 77.64478"},
+                {"id": "dev-102", "name": f"Panel-{proj}-002", "label": "Central Sector 2", "region": "SOUTH", "zone": "Zone B", "ward": "Ward 12", "status": "OFFLINE", "last_received_date": "2026-08-10 10:30:00", "days_offline": "8 Days", "active_issues": ["High Voltage", "Offline (>7 Days)"], "lat_lon": "13.01162, 77.61090"},
+                {"id": "dev-103", "name": f"Panel-{proj}-005", "label": "East Highway 5", "region": "EAST", "zone": "Zone C", "ward": "Ward 15", "status": "OFFLINE_PF_PRIOR", "last_received_date": "2026-08-06 14:15:20", "days_offline": "12 Days", "active_issues": ["High Current / Power Theft", "Offline PF (>7 Days)"], "lat_lon": "13.00363, 77.62065"}
+            ]
         },
-        "devices": [
-            {
-                "id": "dev-001",
-                "name": "Panel-BBMP-Ward-101",
-                "label": "MG Road Sector 4",
-                "type": "Smart Street Light Panel",
-                "is_online": True,
-                "telemetry": {
-                    "active": "true",
-                    "voltage": "230.4 V",
-                    "current": "12.5 A",
-                    "power": "2880 W",
-                    "status": "NORMAL"
-                }
-            },
-            {
-                "id": "dev-002",
-                "name": "Panel-BBMP-Ward-102",
-                "label": "Indiranagar 100ft Rd",
-                "type": "Smart Street Light Panel",
-                "is_online": True,
-                "telemetry": {
-                    "active": "true",
-                    "voltage": "228.1 V",
-                    "current": "15.2 A",
-                    "power": "3467 W",
-                    "status": "NORMAL"
-                }
-            },
-            {
-                "id": "dev-003",
-                "name": "Panel-BBMP-Ward-103",
-                "label": "Koramangala 80ft Rd",
-                "type": "Smart Street Light Panel",
-                "is_online": False,
-                "telemetry": {
-                    "active": "false",
-                    "voltage": "0 V",
-                    "current": "0 A",
-                    "power": "0 W",
-                    "status": "OFFLINE"
-                }
-            },
-            {
-                "id": "dev-004",
-                "name": "Panel-BBMP-Ward-104",
-                "label": "HSR Layout Sector 1",
-                "type": "Smart Street Light Panel",
-                "is_online": True,
-                "telemetry": {
-                    "active": "true",
-                    "voltage": "232.0 V",
-                    "current": "11.0 A",
-                    "power": "2552 W",
-                    "status": "NORMAL"
-                }
-            },
-            {
-                "id": "dev-005",
-                "name": "Panel-BBMP-Ward-105",
-                "label": "Whitefield Main Rd",
-                "type": "Smart Street Light Panel",
-                "is_online": True,
-                "telemetry": {
-                    "active": "true",
-                    "voltage": "210.5 V",
-                    "current": "18.0 A",
-                    "power": "3789 W",
-                    "status": "LOW_VOLTAGE_WARN"
-                }
-            }
-        ],
+        "summary": {"total_devices": 4098, "online_devices": 3975, "offline_devices": 123, "active_alarms": 1},
         "alarms": [
             {
                 "type": "LOW_VOLTAGE_ALARM",
                 "severity": "CRITICAL",
-                "originatorName": "Panel-BBMP-Ward-105",
+                "originatorName": f"Panel-{proj}-001",
                 "createdTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
         ]
@@ -368,60 +324,31 @@ def run_pipeline(
     # 1. Fetch Data
     if use_mock:
         logger.info(f"Using mock panel data for {proj_name} report generation.")
-        data = {
-            "installation_report": {
-                "project_name": proj_name,
-                "performance_score": 98.83,
-                "kpi_score": 94.92,
-                "penalty_points": 208,
-                "offline_gt_7_days": 18,
-                "offline_pf_gt_7_days": 24,
-                "regions": [
-                    {"name": "5B Innovations North Region", "online": 1250, "offline": 15, "offline_pf_today": 10, "offline_pf_prior": 15, "offline_pf": 25, "total": 1290},
-                    {"name": "5B Innovations Central Region", "online": 1820, "offline": 20, "offline_pf_today": 12, "offline_pf_prior": 18, "offline_pf": 30, "total": 1870},
-                    {"name": "5B Innovations South Region", "online": 905, "offline": 13, "offline_pf_today": 8, "offline_pf_prior": 12, "offline_pf": 20, "total": 938}
-                ],
-                "bommanahalli": {"online": 1408, "offline": 14, "offline_pf": 36, "total": 1458},
-                "east": {"online": 2567, "offline": 34, "offline_pf": 39, "total": 2640},
-                "combined": {"online": 3975, "offline": 48, "offline_pf": 75, "total": 4098},
-                "issues": {
-                    "low_voltage": 7, "high_voltage": 3, "power_failure": 179,
-                    "high_current": 5, "low_current": 7, "mcb_trip": 22,
-                    "relay_failure": 0, "meter_comm_failure": 0, "manual_operation": 0, "panel_door_open": 21,
-                    "offline_gt_7_days": 18, "offline_pf_gt_7_days": 24
-                },
-                "affected_panels": [
-                    {"id": "dev-101", "name": f"Panel-{proj_name}-001", "label": "Main Sector 1", "region": "NORTH", "zone": "Zone A", "ward": "Ward 10", "status": "ONLINE", "days_offline": "-", "active_issues": ["Low Voltage"]},
-                    {"id": "dev-102", "name": f"Panel-{proj_name}-002", "label": "Central Sector 2", "region": "SOUTH", "zone": "Zone B", "ward": "Ward 12", "status": "OFFLINE", "days_offline": "8 Days", "active_issues": ["High Voltage", "Offline (>7 Days)"]},
-                    {"id": "dev-103", "name": f"Panel-{proj_name}-005", "label": "East Highway 5", "region": "EAST", "zone": "Zone C", "ward": "Ward 15", "status": "OFFLINE_PF_PRIOR", "days_offline": "12 Days", "active_issues": ["High Current / Power Theft", "Offline PF (>7 Days)"]}
-                ]
-            },
-            "summary": {"total_devices": 4098, "online_devices": 3975, "offline_devices": 123, "active_alarms": 0}
-        }
+        data = get_mock_panel_data(proj_name)
     else:
         tb_missing = Config.validate(check_smtp=False, check_tb=True)
         if tb_missing:
-            logger.warning(f"Missing ThingsBoard credentials ({', '.join(tb_missing)}). Falling back to mock data.")
-            data = get_mock_panel_data()
-        else:
-            tb_client = ThingsBoardClient()
-            if tb_client.login():
-                logger.info(f"Fetching Panel Installation Report for Customer/Project: {proj_name}...")
-                inst_report = tb_client.fetch_panel_installation_report(customer_id=customer_id, project_name=proj_name)
-                alarms = tb_client.get_active_alarms()
-                data = {
-                    "installation_report": inst_report,
-                    "alarms": alarms,
-                    "summary": {
-                        "total_devices": inst_report.get("total_panels", 4003),
-                        "online_devices": 0,
-                        "offline_devices": 0,
-                        "active_alarms": len(alarms)
-                    }
+            logger.error(f"Missing ThingsBoard credentials ({', '.join(tb_missing)}). Cannot proceed with live report execution.")
+            raise RuntimeError(f"Missing ThingsBoard configuration: {', '.join(tb_missing)}")
+        
+        tb_client = ThingsBoardClient()
+        if tb_client.login():
+            logger.info(f"Fetching Panel Installation Report for Customer/Project: {proj_name}...")
+            inst_report = tb_client.fetch_panel_installation_report(customer_id=customer_id, project_name=proj_name)
+            alarms = tb_client.get_active_alarms()
+            data = {
+                "installation_report": inst_report,
+                "alarms": alarms,
+                "summary": {
+                    "total_devices": inst_report.get("total_panels", 0),
+                    "online_devices": inst_report.get("combined", {}).get("online", 0),
+                    "offline_devices": inst_report.get("combined", {}).get("offline", 0),
+                    "active_alarms": len(alarms)
                 }
-            else:
-                logger.error("Failed to authenticate with ThingsBoard. Falling back to mock data.")
-                data = get_mock_panel_data()
+            }
+        else:
+            logger.error(f"Failed to authenticate with ThingsBoard API for project '{proj_name}' after retries. Aborting email report sending to prevent sending empty report.")
+            raise ConnectionError(f"ThingsBoard authentication failed for project '{proj_name}'. Execution aborted.")
 
     # Always print terminal summary table
     print_terminal_summary(data)
