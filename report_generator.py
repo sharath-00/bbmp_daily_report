@@ -196,7 +196,7 @@ HTML_REPORT_TEMPLATE = """
                             <td style="text-align:center;">{{ reg.total }}</td>
                         </tr>
                         {% endfor %}
-                    {% else %}
+                    {% elif project_name == 'BBMP' %}
                         <tr>
                             <td><strong>Bommanahalli Region</strong></td>
                             <td style="text-align:center;"><strong style="color: #2f855a;">{{ inst_summary.bommanahalli.online }}</strong></td>
@@ -210,6 +210,14 @@ HTML_REPORT_TEMPLATE = """
                             <td style="text-align:center;"><span class="badge badge-offline">{{ inst_summary.east.offline }}</span></td>
                             <td style="text-align:center;"><span class="badge badge-warning">{{ inst_summary.east.offline_pf }}</span></td>
                             <td style="text-align:center;">{{ inst_summary.east.total }}</td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td><strong>{{ project_name }} Region</strong></td>
+                            <td style="text-align:center;"><strong style="color: #2f855a;">{{ inst_summary.combined.online }}</strong></td>
+                            <td style="text-align:center;"><span class="badge badge-offline">{{ inst_summary.combined.offline }}</span></td>
+                            <td style="text-align:center;"><span class="badge badge-warning">{{ inst_summary.combined.offline_pf }}</span></td>
+                            <td style="text-align:center;">{{ inst_summary.combined.total }}</td>
                         </tr>
                     {% endif %}
                     <tr class="highlight-row">
@@ -295,10 +303,8 @@ def generate_html_report(data: Optional[Dict[str, Any]] = None) -> str:
     now_dt = datetime.now()
     now_str = now_dt.strftime("%Y-%m-%d")
 
-    # Fallback structure if data is None or missing keys
     safe_data = data or {}
-    
-    inst_summary = safe_data.get("installation_report", {
+    inst_summary = safe_data.get("installation_report") or {
         "bommanahalli": {"online": 1408, "offline": 14, "offline_pf": 36, "total": 1458},
         "east": {"online": 2567, "offline": 34, "offline_pf": 39, "total": 2640},
         "combined": {"online": 3975, "offline": 48, "offline_pf": 75, "total": 4098},
@@ -310,7 +316,7 @@ def generate_html_report(data: Optional[Dict[str, Any]] = None) -> str:
             "relay_failure": 0, "meter_comm_failure": 0, "manual_operation": 0, "panel_door_open": 21,
             "offline_gt_7_days": 18, "offline_pf_gt_7_days": 24
         }
-    })
+    }
 
     iss = inst_summary.get("issues", {})
     if "offline_gt_7_days" not in inst_summary or inst_summary.get("offline_gt_7_days") is None:
