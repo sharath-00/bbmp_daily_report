@@ -289,6 +289,7 @@ def run_pipeline(
     print_cli: bool = False,
     output_file: str = "report_preview.html",
     override_recipients: Optional[List[str]] = None,
+    override_bcc: Optional[List[str]] = None,
     project_name: Optional[str] = None,
     customer_id: Optional[str] = None,
     subject_prefix: Optional[str] = None,
@@ -311,6 +312,13 @@ def run_pipeline(
         recipients_to_use = Config.RECIPIENT_EMAILS_5B or Config.RECIPIENT_EMAILS
     else:
         recipients_to_use = Config.RECIPIENT_EMAILS
+
+    if override_bcc:
+        bcc_to_use = override_bcc
+    elif proj_name != "BBMP":
+        bcc_to_use = Config.BCC_EMAILS_5B
+    else:
+        bcc_to_use = Config.BCC_EMAILS
 
     if proj_name != "BBMP":
         subj_prefix = subject_prefix or Config.EMAIL_SUBJECT_PREFIX_5B
@@ -400,12 +408,13 @@ def run_pipeline(
     # Attach Excel sheet to outgoing email
     attachments_to_send = [excel_file_path]
 
-    logger.info(f"Sending email report to: {', '.join(recipients_to_use)}")
+    logger.info(f"Sending email report to: {', '.join(recipients_to_use)}" + (f" (BCC: {', '.join(bcc_to_use)})" if bcc_to_use else ""))
     success = mailer.send_email(
         recipients=recipients_to_use,
         subject=subject,
         html_content=html_report,
         attachment_paths=attachments_to_send,
+        bcc_recipients=bcc_to_use,
         enable_threading=enable_threading,
         thread_id=t_id
     )
@@ -520,6 +529,7 @@ def main():
     parser.add_argument("--send-now", action="store_true", help="Fetch data and send email immediately")
     parser.add_argument("--mock", action="store_true", help="Use mock telemetry data for testing")
     parser.add_argument("--to", "--recipient", type=str, help="Override recipient email address(es), comma-separated")
+    parser.add_argument("--bcc", type=str, help="Override BCC recipient email address(es), comma-separated")
     parser.add_argument("--output", type=str, default="report_preview.html", help="Local preview output filename")
 
     args = parser.parse_args()
@@ -535,6 +545,10 @@ def main():
     override_recipients = None
     if args.to:
         override_recipients = [r.strip() for r in args.to.split(",") if r.strip()]
+
+    override_bcc = None
+    if args.bcc:
+        override_bcc = [r.strip() for r in args.bcc.split(",") if r.strip()]
 
     # If --mock is used without --send-now, default dry_run to True so mock data doesn't send email
     dry_run_mode = args.dry_run
@@ -576,6 +590,7 @@ def main():
             print_cli=args.print or (len(projects_to_run) == 1 and not (args.send_now or args.dry_run)),
             output_file=out_f,
             override_recipients=override_recipients,
+            override_bcc=override_bcc,
             project_name=proj,
             customer_id=args.customer_id if len(projects_to_run) == 1 else None
         )

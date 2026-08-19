@@ -54,10 +54,11 @@ class EmailSender:
                    html_content: str,
                    text_content: Optional[str] = None,
                    attachment_paths: Optional[List[str]] = None,
+                   bcc_recipients: Optional[List[str]] = None,
                    enable_threading: Optional[bool] = None,
                    thread_id: Optional[str] = None) -> bool:
         """
-        Sends an HTML email to the specified recipient list with optional attachments and threading headers.
+        Sends an HTML email to the specified recipient list with optional attachments, BCC recipients, and threading headers.
         """
         if not recipients:
             logger.error("No recipient email addresses provided.")
@@ -92,6 +93,9 @@ class EmailSender:
         msg["From"] = self.sender_email
         msg["To"] = ", ".join(recipients)
         msg["Message-ID"] = current_msg_id
+
+        # Combine TO and BCC recipients for envelope (do NOT add BCC addresses to MIME headers)
+        envelope_recipients = list(dict.fromkeys(recipients + (bcc_recipients or [])))
 
         # Apply Email Threading Headers (RFC 5322 / Outlook / Gmail threading)
         root_msg_id = None
@@ -152,9 +156,9 @@ class EmailSender:
             if self.username and self.password:
                 server.login(self.username, self.password)
 
-            server.sendmail(self.sender_email, recipients, msg.as_string())
+            server.sendmail(self.sender_email, envelope_recipients, msg.as_string())
             server.quit()
-            logger.info(f"Successfully sent email subject '{subject}' to {len(recipients)} recipients: {', '.join(recipients)}")
+            logger.info(f"Successfully sent email subject '{subject}' to {len(recipients)} TO recipients ({', '.join(recipients)}) and {len(bcc_recipients or [])} BCC recipients.")
 
             if use_threading and root_msg_id:
                 self._save_thread_state(active_thread_id, root_msg_id, current_msg_id)

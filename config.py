@@ -44,6 +44,12 @@ class Config:
     _recipients_5b_str = os.getenv("RECIPIENT_EMAILS_5B", os.getenv("RECIPIENT_EMAILS", ""))
     RECIPIENT_EMAILS_5B = [r.strip() for r in _recipients_5b_str.split(",") if r.strip()]
 
+    _bcc_str = os.getenv("BCC_EMAILS", "")
+    BCC_EMAILS = [r.strip() for r in _bcc_str.split(",") if r.strip()]
+
+    _bcc_5b_str = os.getenv("BCC_EMAILS_5B", "")
+    BCC_EMAILS_5B = [r.strip() for r in _bcc_5b_str.split(",") if r.strip()]
+
     # Project & Customer Settings
     PROJECT_NAME = os.getenv("PROJECT_NAME", "BBMP").strip()
     TB_CUSTOMER_ID = os.getenv("THINGSBOARD_CUSTOMER_ID", "e2119df0-45c3-11f0-94dc-77130b2f47e9").strip()
