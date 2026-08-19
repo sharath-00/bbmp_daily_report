@@ -38,6 +38,7 @@ jobs:
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS_5B || secrets.RECIPIENT_EMAILS }}
           RECIPIENT_EMAILS_5B: ${{ secrets.RECIPIENT_EMAILS_5B || secrets.RECIPIENT_EMAILS }}
+          BCC_EMAILS_5B: ${{ secrets.BCC_EMAILS_5B }}
           EMAIL_SUBJECT_PREFIX: ${{ secrets.EMAIL_SUBJECT_PREFIX_5B || '[5B Innovation Panel Report]' }}
           EMAIL_SUBJECT_PREFIX_5B: ${{ secrets.EMAIL_SUBJECT_PREFIX_5B || '[5B Innovation Panel Report]' }}
           ENABLE_EMAIL_THREADING_5B: ${{ secrets.ENABLE_EMAIL_THREADING_5B || 'false' }}

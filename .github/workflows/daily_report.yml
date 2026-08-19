@@ -35,6 +35,7 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
+          BCC_EMAILS: ${{ secrets.BCC_EMAILS }}
           EMAIL_SUBJECT_PREFIX: ${{ secrets.EMAIL_SUBJECT_PREFIX }}
           ENABLE_EMAIL_THREADING: ${{ secrets.ENABLE_EMAIL_THREADING || 'true' }}
           EMAIL_THREAD_ID: ${{ secrets.EMAIL_THREAD_ID || 'bbmp-panel-telemetry-report-thread@bbmp.local' }}
