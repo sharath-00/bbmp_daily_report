@@ -143,11 +143,6 @@ HTML_REPORT_TEMPLATE = """
         </div>
 
         <div class="content">
-            <!-- Attachment Notice Banner -->
-            <div style="background: #ebf8ff; border: 1px solid #bee3f8; border-left: 5px solid #3182ce; border-radius: 8px; padding: 10px 14px; margin-bottom: 18px; font-size: 13px; color: #2b6cb0;">
-                📍 <strong>Report Attachment:</strong> Detailed Excel Sheet (<code>{{ project_name or 'BBMP' }}_panel_issues_details.xlsx</code>) is attached to this email.
-            </div>
-
             <!-- Summary KPI Cards -->
             <div class="kpi-grid">
                 <div class="kpi-card-cell" style="width: 20%; background: #f0fff4; border-color: #c6f6d5;">
