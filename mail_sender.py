@@ -54,11 +54,12 @@ class EmailSender:
                    html_content: str,
                    text_content: Optional[str] = None,
                    attachment_paths: Optional[List[str]] = None,
+                   inline_images: Optional[dict] = None,
                    bcc_recipients: Optional[List[str]] = None,
                    enable_threading: Optional[bool] = None,
                    thread_id: Optional[str] = None) -> bool:
         """
-        Sends an HTML email to the specified recipient list with optional attachments, BCC recipients, and threading headers.
+        Sends an HTML email to the specified recipient list with optional attachments, inline CID images, BCC recipients, and threading headers.
         """
         if not recipients:
             logger.error("No recipient email addresses provided.")
@@ -74,20 +75,34 @@ class EmailSender:
 
         current_msg_id = make_msgid(domain=domain)
 
-        # Build MIME Message Structure
+        # Build MIME Message Structure (mixed -> related -> alternative)
         default_plain_text = f"Please enable HTML view to see the {subject}."
-        if attachment_paths:
-            msg = MIMEMultipart("mixed")
-            body_part = MIMEMultipart("alternative")
-            plain_text = text_content or default_plain_text
-            body_part.attach(MIMEText(plain_text, "plain", "utf-8"))
-            body_part.attach(MIMEText(html_content, "html", "utf-8"))
-            msg.attach(body_part)
-        else:
-            msg = MIMEMultipart("alternative")
-            plain_text = text_content or default_plain_text
-            msg.attach(MIMEText(plain_text, "plain", "utf-8"))
-            msg.attach(MIMEText(html_content, "html", "utf-8"))
+        plain_text = text_content or default_plain_text
+
+        msg = MIMEMultipart("mixed")
+        related_part = MIMEMultipart("related")
+        alt_part = MIMEMultipart("alternative")
+
+        alt_part.attach(MIMEText(plain_text, "plain", "utf-8"))
+        alt_part.attach(MIMEText(html_content, "html", "utf-8"))
+        related_part.attach(alt_part)
+
+        # Attach inline CID images
+        if inline_images:
+            from email.mime.image import MIMEImage
+            for cid, img_path in inline_images.items():
+                if img_path and os.path.isfile(img_path):
+                    try:
+                        with open(img_path, "rb") as f:
+                            img_part = MIMEImage(f.read())
+                        img_part.add_header("Content-ID", f"<{cid}>")
+                        img_part.add_header("Content-Disposition", "inline", filename=os.path.basename(img_path))
+                        related_part.attach(img_part)
+                        logger.info(f"Attached inline CID image '{cid}': {img_path}")
+                    except Exception as e:
+                        logger.error(f"Failed to attach inline CID image {img_path}: {e}")
+
+        msg.attach(related_part)
 
         msg["Subject"] = subject
         msg["From"] = self.sender_email

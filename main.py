@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 import argparse
@@ -184,6 +185,8 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
 
     fieldnames = ["Panel Name", "Panel Label", "Region", "Zone Name", "Ward Name", "Status", "Last Received Data Date", "Days Offline", "Active Issues", "Lat / Lon"]
 
+    link_font = Font(name="Calibri", size=10, color="0000FF", underline="single")
+
     def create_sheet(title, panels):
         ws = wb.create_sheet(title=title)
         ws.append(fieldnames)
@@ -198,6 +201,7 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
 
         row_idx = 2
         for p in panels:
+            lat_lon_val = p.get("lat_lon", "-")
             ws.append([
                 p.get("name", ""),
                 p.get("label", ""),
@@ -208,7 +212,7 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
                 p.get("last_received_date", "-"),
                 p.get("days_offline", "-"),
                 ", ".join(p.get("active_issues", [])),
-                p.get("lat_lon", "-")
+                lat_lon_val
             ])
             for col_idx, cell in enumerate(ws[row_idx], start=1):
                 cell.font = data_font
@@ -217,6 +221,20 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
                     cell.alignment = Alignment(horizontal="center", vertical="center")
                 else:
                     cell.alignment = data_alignment
+
+            # Format Lat / Lon cell as clickable Google Maps hyperlink if valid coordinates
+            if lat_lon_val and lat_lon_val != "-" and "," in str(lat_lon_val):
+                coords = [c.strip() for c in str(lat_lon_val).split(",")]
+                if len(coords) == 2:
+                    try:
+                        lat_f, lon_f = float(coords[0]), float(coords[1])
+                        maps_url = f"https://www.google.com/maps?q={lat_f},{lon_f}"
+                        lat_lon_cell = ws.cell(row=row_idx, column=10)
+                        lat_lon_cell.hyperlink = maps_url
+                        lat_lon_cell.font = link_font
+                    except ValueError:
+                        pass
+
             ws.row_dimensions[row_idx].height = 20
             row_idx += 1
 
@@ -259,6 +277,7 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
 
     wb.save(excel_path)
     return str(excel_path)
+
 
 
 def list_customers_cmd():
@@ -313,8 +332,12 @@ def run_pipeline(
     else:
         recipients_to_use = Config.RECIPIENT_EMAILS
 
-    if override_bcc:
+    if override_bcc is not None:
         bcc_to_use = override_bcc
+    elif override_recipients:
+        # If recipient address is explicitly overridden (e.g. via --to),
+        # do NOT default to the config BCC list unless --bcc was explicitly specified.
+        bcc_to_use = []
     elif proj_name != "BBMP":
         bcc_to_use = Config.BCC_EMAILS_5B
     else:
@@ -365,7 +388,7 @@ def run_pipeline(
     # Always print terminal summary table
     print_terminal_summary(data)
 
-    # Export detailed issues to Excel (.xlsx)
+    # Export detailed issues to Excel (.xlsx) with Google Maps hyperlinks
     excel_filename = f"{proj_name.lower().replace(' ', '_')}_panel_issues_details.xlsx" if proj_name != "BBMP" else "panel_issues_details.xlsx"
     excel_file_path = export_panel_issues_to_excel(data, output_excel=excel_filename, project_name=proj_name)
 
@@ -405,8 +428,9 @@ def run_pipeline(
     )
     subject = f"{subj_prefix} Telemetry Status Report"
     
-    # Attach Excel sheet to outgoing email
+    # Attach Excel sheet only
     attachments_to_send = [excel_file_path]
+    inline_imgs = None
 
     logger.info(f"Sending email report to: {', '.join(recipients_to_use)}" + (f" (BCC: {', '.join(bcc_to_use)})" if bcc_to_use else ""))
     success = mailer.send_email(
@@ -414,6 +438,7 @@ def run_pipeline(
         subject=subject,
         html_content=html_report,
         attachment_paths=attachments_to_send,
+        inline_images=inline_imgs,
         bcc_recipients=bcc_to_use,
         enable_threading=enable_threading,
         thread_id=t_id
@@ -547,8 +572,8 @@ def main():
         override_recipients = [r.strip() for r in args.to.split(",") if r.strip()]
 
     override_bcc = None
-    if args.bcc:
-        override_bcc = [r.strip() for r in args.bcc.split(",") if r.strip()]
+    if args.bcc is not None:
+        override_bcc = [r.strip() for r in args.bcc.split(",") if r.strip() and r.lower() != "none"]
 
     # If --mock is used without --send-now, default dry_run to True so mock data doesn't send email
     dry_run_mode = args.dry_run

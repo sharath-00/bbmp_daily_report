@@ -143,6 +143,11 @@ HTML_REPORT_TEMPLATE = """
         </div>
 
         <div class="content">
+            <!-- Attachment Notice Banner -->
+            <div style="background: #ebf8ff; border: 1px solid #bee3f8; border-left: 5px solid #3182ce; border-radius: 8px; padding: 10px 14px; margin-bottom: 18px; font-size: 13px; color: #2b6cb0;">
+                📍 <strong>Report Attachment:</strong> Detailed Excel Sheet (<code>{{ project_name or 'BBMP' }}_panel_issues_details.xlsx</code>) is attached to this email.
+            </div>
+
             <!-- Summary KPI Cards -->
             <div class="kpi-grid">
                 <div class="kpi-card-cell" style="width: 20%; background: #f0fff4; border-color: #c6f6d5;">
@@ -161,87 +166,88 @@ HTML_REPORT_TEMPLATE = """
                     <div class="kpi-value" style="color: #c53030;">{{ inst_summary.combined.offline }}</div>
                     <div class="kpi-label">Offline Panels</div>
                 </div>
-                <div class="kpi-card-cell" style="width: 20%;">
+                <div class="kpi-card-cell" style="width: 20%; background: #fffaf0; border-color: #feebc8;">
                     <div class="kpi-value" style="color: #dd6b20;">{{ inst_summary.combined.offline_pf }}</div>
-                    <div class="kpi-label">Offline (PF)</div>
+                    <div class="kpi-label" style="color: #744210;">Offline (Power Failure)</div>
                 </div>
             </div>
 
-            <div style="width: 100%; text-align: left; margin-top: -6px; margin-bottom: 22px; padding-left: 4px; clear: both;">
-                <span style="font-size: 13px; color: #4a5568; font-weight: 500; display: inline-block;">
-                    📊 <strong>KPI Score (excl. Power Failure):</strong> <span style="color: #2b6cb0; font-weight: 700; font-size: 14px;">{{ inst_summary.kpi_score }}%</span>
-                </span>
-            </div>
-
-            <!-- Panel Telemetry & Online/Offline Report Table -->
-            <div class="section-title">📍 {{ project_name or 'BBMP' }} Panel Live Telemetry & Status Report</div>
+            <!-- Regional Availability Table -->
+            <h3 class="section-title">📊 Regional Availability & Operations Summary</h3>
             <table>
                 <thead>
                     <tr>
                         <th>Region / Zone</th>
-                        <th style="text-align:center;">Online</th>
-                        <th style="text-align:center;">Offline</th>
-                        <th style="text-align:center;">Offline (PF)</th>
-                        <th style="text-align:center;">Total Panels</th>
+                        <th style="text-align: center;">Online Panels</th>
+                        <th style="text-align: center;">Offline Panels</th>
+                        <th style="text-align: center;">PF (Today)</th>
+                        <th style="text-align: center;">PF (Prior)</th>
+                        <th style="text-align: center;">Total Panels</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% if inst_summary.regions and inst_summary.regions|length > 0 %}
-                        {% for reg in inst_summary.regions %}
+                    {% if inst_summary.regions %}
+                        {% for r in inst_summary.regions %}
                         <tr>
-                            <td><strong>{{ reg.name }}</strong></td>
-                            <td style="text-align:center;"><strong style="color: #2f855a;">{{ reg.online }}</strong></td>
-                            <td style="text-align:center;"><span class="badge badge-offline">{{ reg.offline }}</span></td>
-                            <td style="text-align:center;"><span class="badge badge-warning">{{ reg.offline_pf }}</span></td>
-                            <td style="text-align:center;">{{ reg.total }}</td>
+                            <td><strong>{{ r.name }}</strong></td>
+                            <td style="text-align: center; color: #2f855a; font-weight: bold;">{{ r.online }}</td>
+                            <td style="text-align: center; color: #c53030; font-weight: bold;">{{ r.offline }}</td>
+                            <td style="text-align: center; color: #dd6b20;">{{ r.offline_pf_today }}</td>
+                            <td style="text-align: center; color: #744210;">{{ r.offline_pf_prior }}</td>
+                            <td style="text-align: center; font-weight: bold;">{{ r.total }}</td>
                         </tr>
                         {% endfor %}
-                    {% elif project_name == 'BBMP' %}
+                    {% elif project_name and 'BBMP' not in project_name.upper() %}
                         <tr>
-                            <td><strong>Bommanahalli Region</strong></td>
-                            <td style="text-align:center;"><strong style="color: #2f855a;">{{ inst_summary.bommanahalli.online }}</strong></td>
-                            <td style="text-align:center;"><span class="badge badge-offline">{{ inst_summary.bommanahalli.offline }}</span></td>
-                            <td style="text-align:center;"><span class="badge badge-warning">{{ inst_summary.bommanahalli.offline_pf }}</span></td>
-                            <td style="text-align:center;">{{ inst_summary.bommanahalli.total }}</td>
-                        </tr>
-                        <tr>
-                            <td><strong>EAST Region</strong></td>
-                            <td style="text-align:center;"><strong style="color: #2f855a;">{{ inst_summary.east.online }}</strong></td>
-                            <td style="text-align:center;"><span class="badge badge-offline">{{ inst_summary.east.offline }}</span></td>
-                            <td style="text-align:center;"><span class="badge badge-warning">{{ inst_summary.east.offline_pf }}</span></td>
-                            <td style="text-align:center;">{{ inst_summary.east.total }}</td>
+                            <td><strong>{{ project_name }}</strong></td>
+                            <td style="text-align: center; color: #2f855a; font-weight: bold;">{{ inst_summary.combined.online }}</td>
+                            <td style="text-align: center; color: #c53030; font-weight: bold;">{{ inst_summary.combined.offline }}</td>
+                            <td style="text-align: center; color: #dd6b20;">{{ inst_summary.combined.offline_pf_today }}</td>
+                            <td style="text-align: center; color: #744210;">{{ inst_summary.combined.offline_pf_prior }}</td>
+                            <td style="text-align: center; font-weight: bold;">{{ inst_summary.combined.total }}</td>
                         </tr>
                     {% else %}
                         <tr>
-                            <td><strong>{{ project_name }} Region</strong></td>
-                            <td style="text-align:center;"><strong style="color: #2f855a;">{{ inst_summary.combined.online }}</strong></td>
-                            <td style="text-align:center;"><span class="badge badge-offline">{{ inst_summary.combined.offline }}</span></td>
-                            <td style="text-align:center;"><span class="badge badge-warning">{{ inst_summary.combined.offline_pf }}</span></td>
-                            <td style="text-align:center;">{{ inst_summary.combined.total }}</td>
+                            <td><strong>Bommanahalli</strong></td>
+                            <td style="text-align: center; color: #2f855a; font-weight: bold;">{{ inst_summary.bommanahalli.online }}</td>
+                            <td style="text-align: center; color: #c53030; font-weight: bold;">{{ inst_summary.bommanahalli.offline }}</td>
+                            <td style="text-align: center; color: #dd6b20;">{{ inst_summary.bommanahalli.offline_pf_today }}</td>
+                            <td style="text-align: center; color: #744210;">{{ inst_summary.bommanahalli.offline_pf_prior }}</td>
+                            <td style="text-align: center; font-weight: bold;">{{ inst_summary.bommanahalli.total }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>EAST</strong></td>
+                            <td style="text-align: center; color: #2f855a; font-weight: bold;">{{ inst_summary.east.online }}</td>
+                            <td style="text-align: center; color: #c53030; font-weight: bold;">{{ inst_summary.east.offline }}</td>
+                            <td style="text-align: center; color: #dd6b20;">{{ inst_summary.east.offline_pf_today }}</td>
+                            <td style="text-align: center; color: #744210;">{{ inst_summary.east.offline_pf_prior }}</td>
+                            <td style="text-align: center; font-weight: bold;">{{ inst_summary.east.total }}</td>
                         </tr>
                     {% endif %}
-                    <tr class="highlight-row">
-                        <td>🤝 TOTAL / COMBINED</td>
-                        <td style="text-align:center;"><strong style="color: #2f855a;">{{ inst_summary.combined.online }}</strong></td>
-                        <td style="text-align:center;"><span class="badge badge-offline">{{ inst_summary.combined.offline }}</span></td>
-                        <td style="text-align:center;"><span class="badge badge-warning">{{ inst_summary.combined.offline_pf }}</span></td>
-                        <td style="text-align:center;">{{ inst_summary.combined.total }}</td>
+                    <tr style="background-color: #edf2f7; font-weight: bold;">
+                        <td>COMBINED TOTAL</td>
+                        <td style="text-align: center; color: #2f855a;">{{ inst_summary.combined.online }}</td>
+                        <td style="text-align: center; color: #c53030;">{{ inst_summary.combined.offline }}</td>
+                        <td style="text-align: center; color: #dd6b20;">{{ inst_summary.combined.offline_pf_today }}</td>
+                        <td style="text-align: center; color: #744210;">{{ inst_summary.combined.offline_pf_prior }}</td>
+                        <td style="text-align: center;">{{ inst_summary.combined.total }}</td>
                     </tr>
                 </tbody>
             </table>
 
-            <!-- Panel Issues Breakdown (O&M Dashboard) -->
-            <div class="section-title">⚠️ Panel Issues Breakdown (O&M Dashboard)</div>
-            <table style="width: 100%; border-spacing: 12px; border-collapse: separate; margin-bottom: 12px;">
+            <!-- Active Alarms / Issues Overview -->
+            <h3 class="section-title">⚠️ Panel Issues & Operational Alarms Breakdown</h3>
+            <table style="width: 100%; border-spacing: 10px; border-collapse: separate; margin-bottom: 20px;">
                 <tr>
-                    <td style="width: 33.33%; vertical-align: top; background: #fffaf0; border: 1px solid #feebc8; border-radius: 8px; padding: 15px;">
-                        <h4 style="margin: 0 0 10px 0; color: #744210; border-bottom: 1px solid #fbd38d; padding-bottom: 5px; font-size: 14px;">⚡ Input Issues</h4>
+                    <td style="width: 33.33%; vertical-align: top; background: #fff5f5; border: 1px solid #feb2b2; border-radius: 8px; padding: 15px;">
+                        <h4 style="margin: 0 0 10px 0; color: #9b2c2c; border-bottom: 1px solid #feb2b2; padding-bottom: 5px; font-size: 14px;">⚡ Input Issues</h4>
                         <table style="width: 100%; font-size: 13px; margin: 0;">
                             <tr><td style="padding: 4px 0;">Low Voltage</td><td style="text-align: right; font-weight: bold; color: #c53030;">{{ inst_summary.issues.low_voltage }}</td></tr>
                             <tr><td style="padding: 4px 0;">High Voltage</td><td style="text-align: right; font-weight: bold; color: #c53030;">{{ inst_summary.issues.high_voltage }}</td></tr>
+                            <tr><td style="padding: 4px 0;">Power Failure (PF)</td><td style="text-align: right; font-weight: bold; color: #dd6b20;">{{ inst_summary.issues.power_failure }}</td></tr>
                         </table>
                     </td>
-                    <td style="width: 33.33%; vertical-align: top; background: #fff5f5; border: 1px solid #fed7d7; border-radius: 8px; padding: 15px;">
+                    <td style="width: 33.33%; vertical-align: top; background: #fff5f5; border: 1px solid #feb2b2; border-radius: 8px; padding: 15px;">
                         <h4 style="margin: 0 0 10px 0; color: #742a2a; border-bottom: 1px solid #feb2b2; padding-bottom: 5px; font-size: 14px;">🔌 Output Issues</h4>
                         <table style="width: 100%; font-size: 13px; margin: 0;">
                             <tr><td style="padding: 4px 0;">High Current / Power Theft</td><td style="text-align: right; font-weight: bold; color: #c53030;">{{ inst_summary.issues.high_current }}</td></tr>
@@ -345,10 +351,54 @@ def generate_html_report(data: Optional[Dict[str, Any]] = None) -> str:
         pen_pct = (pen_pts / total_p * 100.0) if total_p > 0 else 0.0
     proj_name = inst_summary.get("project_name", safe_data.get("project_name", "BBMP"))
 
+    affected_panels = inst_summary.get("affected_panels", [])
+    offline_panels_list = []
+    coords_list = []
+
+    idx = 1
+    for p in affected_panels:
+        if not p.get("active_issues"):
+            continue
+        lat_lon_str = str(p.get("lat_lon", "-")).strip()
+        gmaps_link = ""
+        if lat_lon_str and lat_lon_str != "-" and "," in lat_lon_str:
+            c = [x.strip() for x in lat_lon_str.split(",")]
+            if len(c) == 2:
+                gmaps_link = f"https://www.google.com/maps?q={c[0]},{c[1]}"
+                coords_list.append(f"{c[0]},{c[1]}")
+
+        status_str = str(p.get("status", "OFFLINE")).upper()
+        is_pf = "PF" in status_str or any("power failure" in str(iss).lower() for iss in p.get("active_issues", []))
+
+        offline_panels_list.append({
+            "idx": idx,
+            "name": p.get("name", "Panel"),
+            "label": p.get("label", "-"),
+            "region": p.get("region", "-"),
+            "zone": p.get("zone", "-"),
+            "ward": p.get("ward", "-"),
+            "status": p.get("status", "-"),
+            "is_pf": is_pf,
+            "days_offline": p.get("days_offline", "-"),
+            "last_received_date": p.get("last_received_date", "-"),
+            "active_issues": p.get("active_issues", []),
+            "lat_lon": lat_lon_str,
+            "gmaps_link": gmaps_link
+        })
+        idx += 1
+
+    if coords_list:
+        google_maps_multi_url = f"https://www.google.com/maps/dir/{'/'.join(coords_list[:10])}"
+    else:
+        google_maps_multi_url = "https://maps.google.com"
+
     return template.render(
         generated_at=now_str,
         project_name=proj_name,
         inst_summary=inst_summary,
+        google_maps_multi_url=google_maps_multi_url,
+        offline_panels_list=offline_panels_list,
+        has_map_img=bool(coords_list),
         summary=safe_data.get("summary", {"total_devices": 0, "online_devices": 0, "offline_devices": 0, "active_alarms": 0}),
         devices=safe_data.get("devices", []),
         alarms=safe_data.get("alarms", [])
