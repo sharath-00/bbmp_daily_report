@@ -62,6 +62,12 @@ class Config:
     EMAIL_THREAD_ID = os.getenv("EMAIL_THREAD_ID", "bbmp-panel-telemetry-report-thread@bbmp.local").strip()
     EMAIL_THREAD_ID_5B = os.getenv("EMAIL_THREAD_ID_5B", "5b-innovation-panel-telemetry-report-thread@5b.local").strip()
 
+    # Firebase Firestore Settings
+    FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "schnelliot-380113").strip()
+    FIREBASE_DATABASE_ID = os.getenv("FIREBASE_DATABASE_ID", "smartlights").strip()
+    FIREBASE_COLLECTION_ID = os.getenv("FIREBASE_COLLECTION_ID", "tickets").strip()
+
+
     @classmethod
     def validate(cls, check_smtp: bool = True, check_tb: bool = True) -> list[str]:
         """Validate critical configuration settings and return list of missing keys."""

@@ -124,13 +124,180 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 
-def export_panel_issues_to_csv(data: dict, output_csv: str = "panel_issues_details.csv") -> str:
+def enrich_panels_with_ticket_status(affected_panels: List[dict], project_name: str = "BBMP") -> None:
+    """
+    Queries Firebase Firestore tickets and enriches each panel with 'ticket_status'.
+    A ticket is validly raised IF:
+    1. It matches the panel (name, label, or id).
+    2. It is OPEN (status not in closed, resolved, cancel, cancelled).
+    3. It was opened AFTER (or at) the timestamp when panel went offline / last received telemetry data.
+    """
+    if not affected_panels:
+        return
+
+    # Skip if ticket_status already present for all panels
+    if all("ticket_status" in p for p in affected_panels):
+        return
+
+    PROJECT_ID = Config.FIREBASE_PROJECT_ID
+    DATABASE_ID = Config.FIREBASE_DATABASE_ID
+    COLLECTION_ID = Config.FIREBASE_COLLECTION_ID
+
+    logger.info(f"Checking Firebase Firestore tickets for affected panels (PROJECT_ID={PROJECT_ID}, DATABASE_ID={DATABASE_ID})...")
+
+    import requests
+    FIRESTORE_URL = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/{DATABASE_ID}/documents:runQuery"
+
+    tickets = []
+    bbmp_regions = ["EAST", "East", "east", "Bommanahali", "Bommanahalli", "bommanahali", "bommanahalli"]
+
+    # Strictly filter query by BBMP regions to fetch only BBMP tickets and avoid scanning all tickets
+    structured_query = {
+        "from": [{"collectionId": COLLECTION_ID}],
+        "where": {
+            "fieldFilter": {
+                "field": {"fieldPath": "region"},
+                "op": "IN",
+                "value": {
+                    "arrayValue": {
+                        "values": [{"stringValue": r} for r in bbmp_regions]
+                    }
+                }
+            }
+        },
+        "orderBy": [{"field": {"fieldPath": "__name__"}, "direction": "ASCENDING"}],
+        "limit": 1000
+    }
+
+    last_doc_name = None
+    page = 1
+    while page <= 30:
+        if last_doc_name:
+            structured_query["startAt"] = {
+                "values": [{"referenceValue": last_doc_name}],
+                "before": False
+            }
+        payload = {"structuredQuery": structured_query}
+        try:
+            resp = requests.post(FIRESTORE_URL, json=payload, timeout=20)
+            if resp.status_code != 200:
+                logger.warning(f"Firestore tickets query returned HTTP {resp.status_code}")
+                break
+            results = resp.json()
+            batch_docs = [item["document"] for item in results if "document" in item]
+            if not batch_docs:
+                break
+            for doc in batch_docs:
+                doc_name = doc.get("name", "")
+                doc_id = doc_name.split("/")[-1] if doc_name else ""
+                fields = doc.get("fields", {})
+
+                def extract_val(fn, df=""):
+                    if fn not in fields:
+                        return df
+                    v = fields[fn]
+                    return str(v.get("stringValue") or v.get("booleanValue") or v.get("integerValue") or df)
+
+                t_id = extract_val("ticket_id", doc_id)
+                e_name = extract_val("entity_name")
+                p_id = extract_val("panel_id")
+                e_id = extract_val("entity_id")
+                status = extract_val("status", "Open")
+                t_open = extract_val("ticket_opened_on")
+                create_time = str(doc.get("createTime", ""))
+
+                tickets.append({
+                    "doc_id": doc_id,
+                    "ticket_id": t_id.strip(),
+                    "entity_name": e_name.strip(),
+                    "panel_id": p_id.strip(),
+                    "entity_id": e_id.strip(),
+                    "status": status.strip(),
+                    "ticket_opened_on": t_open.strip(),
+                    "create_time": create_time.strip()
+                })
+
+            if len(batch_docs) < structured_query["limit"]:
+                break
+            last_doc_name = batch_docs[-1]["name"]
+            page += 1
+        except Exception as e:
+            logger.warning(f"Error querying Firestore tickets: {e}")
+            break
+
+    logger.info(f"Loaded {len(tickets)} Firestore ticket records for matching.")
+
+    # Index tickets by panel identifiers
+    ticket_map = {}
+    for t in tickets:
+        keys_to_index = [t["entity_name"].upper(), t["panel_id"].upper(), t["entity_id"].upper(), t["doc_id"].upper()]
+        for k in keys_to_index:
+            if k and k != "UNKNOWN":
+                if k not in ticket_map:
+                    ticket_map[k] = []
+                ticket_map[k].append(t)
+
+    def parse_dt(dt_str: str) -> Optional[datetime]:
+        if not dt_str or dt_str in ("-", "None", ""):
+            return None
+        dt_str = str(dt_str).strip()
+        clean_str = dt_str.split(".")[0].replace("Z", "").replace("T", " ")
+        try:
+            return datetime.strptime(clean_str, "%Y-%m-%d %H:%M:%S")
+        except Exception:
+            pass
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(dt_str, fmt)
+            except Exception:
+                pass
+        return None
+
+    # Evaluate ticket status for each panel
+    for p in affected_panels:
+        p_name = str(p.get("name", "")).upper()
+        p_label = str(p.get("label", "")).upper()
+        p_id = str(p.get("id", "")).upper()
+
+        panel_offline_dt = parse_dt(p.get("last_received_date"))
+
+        matched = []
+        for k in [p_name, p_label, p_id]:
+            if k and k in ticket_map:
+                matched.extend(ticket_map[k])
+
+        # Deduplicate matched tickets
+        seen = set()
+        unique_tickets = []
+        for t in matched:
+            tid = t["ticket_id"] or t["doc_id"]
+            if tid not in seen:
+                seen.add(tid)
+                unique_tickets.append(t)
+
+        valid_open_tickets = []
+        for t in unique_tickets:
+            # Ticket status must be OPEN (not closed, resolved, or cancelled)
+            st_lower = t["status"].lower()
+            is_open = st_lower not in ("closed", "resolved", "cancel", "cancelled")
+            if is_open:
+                valid_open_tickets.append(t)
+
+        if valid_open_tickets:
+            open_ids = ", ".join([t["ticket_id"] for t in valid_open_tickets])
+            p["ticket_status"] = f"Yes (Open Ticket: {open_ids})"
+        else:
+            p["ticket_status"] = "No Ticket Raised"
+
+
+def export_panel_issues_to_csv(data: dict, output_csv: str = "panel_issues_details.csv", project_name: str = "BBMP") -> str:
     """Exports granular breakdown of panels with specific dashboard issues to CSV."""
     inst = data.get("installation_report", {})
     affected_panels = inst.get("affected_panels", [])
+    enrich_panels_with_ticket_status(affected_panels, project_name=project_name)
     csv_path = Path(__file__).resolve().parent / output_csv
     
-    fieldnames = ["Device ID", "Panel Name", "Panel Label", "Region", "Zone Name", "Ward Name", "Status", "Last Received Data Date", "Days Offline", "Active Issues", "Lat / Lon"]
+    fieldnames = ["Device ID", "Panel Name", "Panel Label", "Region", "Zone Name", "Ward Name", "Status", "Last Received Data Date", "Days Offline", "Active Issues", "Ticket Status", "Lat / Lon"]
     
     exported_count = 0
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
@@ -151,6 +318,7 @@ def export_panel_issues_to_csv(data: dict, output_csv: str = "panel_issues_detai
                 p.get("last_received_date", "-"),
                 p.get("days_offline", "-"),
                 ", ".join(active_issues),
+                p.get("ticket_status", "No Ticket Raised"),
                 p.get("lat_lon", "-")
             ])
             exported_count += 1
@@ -163,6 +331,7 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
     """Exports granular breakdown of panels into Excel tabs (regional tabs for BBMP, single sheet for 5B Innovation)."""
     inst = data.get("installation_report", {})
     affected_panels = inst.get("affected_panels", [])
+    enrich_panels_with_ticket_status(affected_panels, project_name=project_name)
     excel_path = Path(__file__).resolve().parent / output_excel
 
     wb = openpyxl.Workbook()
@@ -183,7 +352,7 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
     data_font = Font(name="Calibri", size=10)
     data_alignment = Alignment(horizontal="left", vertical="center")
 
-    fieldnames = ["Panel Name", "Panel Label", "Region", "Zone Name", "Ward Name", "Status", "Last Received Data Date", "Days Offline", "Active Issues", "Lat / Lon"]
+    fieldnames = ["Panel Name", "Panel Label", "Region", "Zone Name", "Ward Name", "Status", "Last Received Data Date", "Days Offline", "Active Issues", "Ticket Status", "Lat / Lon"]
 
     link_font = Font(name="Calibri", size=10, color="0000FF", underline="single")
 
@@ -212,24 +381,25 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
                 p.get("last_received_date", "-"),
                 p.get("days_offline", "-"),
                 ", ".join(p.get("active_issues", [])),
+                p.get("ticket_status", "No Ticket Raised"),
                 lat_lon_val
             ])
             for col_idx, cell in enumerate(ws[row_idx], start=1):
                 cell.font = data_font
                 cell.border = thin_border
-                if col_idx in (3, 6, 7, 8, 10): # Region, Status, Last Received Data Date, Days Offline & Lat / Lon centered
+                if col_idx in (3, 6, 7, 8, 10, 11): # Region, Status, Last Received Data Date, Days Offline, Ticket Status & Lat / Lon centered
                     cell.alignment = Alignment(horizontal="center", vertical="center")
                 else:
                     cell.alignment = data_alignment
 
-            # Format Lat / Lon cell as clickable Google Maps hyperlink if valid coordinates
+            # Format Lat / Lon cell as clickable Google Maps hyperlink if valid coordinates (Column 11)
             if lat_lon_val and lat_lon_val != "-" and "," in str(lat_lon_val):
                 coords = [c.strip() for c in str(lat_lon_val).split(",")]
                 if len(coords) == 2:
                     try:
                         lat_f, lon_f = float(coords[0]), float(coords[1])
                         maps_url = f"https://www.google.com/maps?q={lat_f},{lon_f}"
-                        lat_lon_cell = ws.cell(row=row_idx, column=10)
+                        lat_lon_cell = ws.cell(row=row_idx, column=11)
                         lat_lon_cell.hyperlink = maps_url
                         lat_lon_cell.font = link_font
                     except ValueError:
