@@ -614,7 +614,9 @@ class ThingsBoardClient:
                     if has_issue:
                         issues_summary[k] += 1
 
-                if panel_info["active_issues"]:
+                if panel_info["active_issues"] or status != "ONLINE":
+                    if not panel_info["active_issues"] and status != "ONLINE":
+                        panel_info["active_issues"] = ["Power Failure" if ("PF" in str(status).upper()) else "Offline"]
                     affected_panels.append(panel_info)
 
                 cat_key = category

@@ -414,6 +414,12 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
             col_letter = get_column_letter(col[0].column)
             ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
 
+    # Extract strictly offline panels alone (excluding Power Failure: OFFLINE_PF_TODAY & OFFLINE_PF_PRIOR)
+    offline_panels = [
+        p for p in affected_panels
+        if str(p.get("status", "")).strip().upper() == "OFFLINE"
+    ]
+
     is_bbmp = (project_name.upper() == "BBMP")
 
     if is_bbmp:
@@ -437,13 +443,19 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
         create_sheet("East", east_panels)
         if other_panels:
             create_sheet("Other Regions", other_panels)
-        logger.info(f"Exported BBMP detailed panel issues (Bommanahalli: {len(bom_panels)}, East: {len(east_panels)}) to Excel: {excel_path}")
+
+        # Dedicated tab for offline panels alone
+        create_sheet("Offline Panels", offline_panels)
+        logger.info(f"Exported BBMP detailed panel issues (Bommanahalli: {len(bom_panels)}, East: {len(east_panels)}, Offline Panels: {len(offline_panels)}) to Excel: {excel_path}")
     else:
-        # 5B Innovation or non-BBMP project - Single dedicated sheet without Bommanahalli / East tabs
+        # 5B Innovation or non-BBMP project - Single dedicated sheet plus Offline Panels tab
         active_5b_panels = [p for p in affected_panels if p.get("active_issues")]
         sheet_title = f"{project_name} Panel Issues" if len(f"{project_name} Panel Issues") <= 30 else "Panel Issues Details"
         create_sheet(sheet_title, active_5b_panels)
-        logger.info(f"Exported {project_name} detailed panel issues ({len(active_5b_panels)} panels) to single sheet '{sheet_title}' Excel: {excel_path}")
+
+        # Dedicated tab for offline panels alone
+        create_sheet("Offline Panels", offline_panels)
+        logger.info(f"Exported {project_name} detailed panel issues ({len(active_5b_panels)} panels, {len(offline_panels)} offline panels) to Excel: {excel_path}")
 
     wb.save(excel_path)
     return str(excel_path)

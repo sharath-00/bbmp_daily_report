@@ -167,6 +167,11 @@ HTML_REPORT_TEMPLATE = """
                 </div>
             </div>
 
+            <!-- KPI Score under Cards -->
+            <div style="margin-top: -4px; margin-bottom: 18px; font-size: 13px; font-weight: 600; color: #4a5568; padding: 0 2px;">
+                <strong>KPI Score (Excl. Power Failure):</strong> <span style="font-size: 15px; font-weight: 800; color: #2b6cb0;">{{ inst_summary.kpi_score }}%</span>
+            </div>
+
             <!-- Regional Availability Table -->
             <h3 class="section-title">📊 Regional Availability & Operations Summary</h3>
             <table>
@@ -335,15 +340,21 @@ def generate_html_report(data: Optional[Dict[str, Any]] = None) -> str:
     elif "performance_score" not in inst_summary:
         inst_summary["performance_score"] = 0.0
 
-    # Ensure kpi_score (excluding offline_pf) is calculated
+    # Ensure kpi_score (excluding offline_pf) and penalty_points are calculated
+    total_p = comb.get("total", 4098) if comb else 4098
+    off_p = comb.get("offline", 0) if comb else 0
+    high_c = iss.get("high_current", 0)
+    mcb_t = iss.get("mcb_trip", 0)
+    meter_c = iss.get("meter_comm_failure", 0)
+    pen_pts = (off_p * 1) + (high_c * 10) + (mcb_t * 5) + (meter_c * 5)
+
+    if "penalty_points" not in inst_summary or inst_summary.get("penalty_points") is None:
+        inst_summary["penalty_points"] = pen_pts
+
     if "kpi_score" not in inst_summary or inst_summary.get("kpi_score") is None:
-        total_p = comb.get("total", 4098) if comb else 4098
-        off_p = comb.get("offline", 0) if comb else 0
-        high_c = iss.get("high_current", 0)
-        mcb_t = iss.get("mcb_trip", 0)
-        meter_c = iss.get("meter_comm_failure", 0)
-        pen_pts = (off_p * 1) + (high_c * 10) + (mcb_t * 5) + (meter_c * 5)
         pen_pct = (pen_pts / total_p * 100.0) if total_p > 0 else 0.0
+        inst_summary["kpi_score"] = max(0.0, round(100.0 - pen_pct, 2))
+
     proj_name = inst_summary.get("project_name", safe_data.get("project_name", "BBMP"))
 
     affected_panels = inst_summary.get("affected_panels", [])
