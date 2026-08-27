@@ -2,6 +2,7 @@ import time
 from datetime import datetime, date, timedelta, timezone, time as time_obj
 import logging
 from typing import Dict, Any, List, Optional
+from collections import defaultdict
 import requests
 from config import Config
 
@@ -385,18 +386,21 @@ class ThingsBoardClient:
             
             # 1. Fetch exact dashboard timeseries keys (systime, pkt, fault) for 100% dashboard match
             systime_val = None
+            systime_ts = 0
             pkt_val = None
             pkt_ts = 0
             fault_val = None
+            fault_ts = 0
 
             try:
-                r_ts = self.session.get(f"{self.host}/api/plugins/telemetry/DEVICE/{dev_id}/values/timeseries?keys=systime,pkt,fault", timeout=5)
+                r_ts = self.session.get(f"{self.host}/api/plugins/telemetry/DEVICE/{dev_id}/values/timeseries?keys=systime,pkt,fault", timeout=12)
                 if r_ts.status_code == 200:
                     ts_data = r_ts.json()
                     if isinstance(ts_data, dict):
                         systime_list = ts_data.get("systime")
                         if isinstance(systime_list, list) and len(systime_list) > 0 and isinstance(systime_list[0], dict):
                             systime_val = systime_list[0].get("value")
+                            systime_ts = systime_list[0].get("ts", 0)
 
                         pkt_list = ts_data.get("pkt")
                         if isinstance(pkt_list, list) and len(pkt_list) > 0 and isinstance(pkt_list[0], dict):
@@ -407,23 +411,7 @@ class ThingsBoardClient:
                         fault_list = ts_data.get("fault")
                         if isinstance(fault_list, list) and len(fault_list) > 0 and isinstance(fault_list[0], dict):
                             fault_val = fault_list[0].get("value")
-                    
-                    # EXACT DASHBOARD JAVASCRIPT FORMULA FROM O&M DASHBOARD
-                    if str(pkt_val) == "8":
-                        dev_issues["power_failure"] = True
-                        if pkt_ts >= today_start_ts_ms:
-                            status = "OFFLINE_PF_TODAY"
-                        else:
-                            status = "OFFLINE_PF_PRIOR"
-                    elif systime_val is not None:
-                        try:
-                            sys_sec = float(systime_val)
-                            if (now_ts_sec - sys_sec) < THRESHOLD_SEC:
-                                status = "ONLINE"
-                            else:
-                                status = "OFFLINE"
-                        except Exception:
-                            pass
+                            fault_ts = fault_list[0].get("ts", 0)
 
                     alerts = decode_fault_alerts(fault_val)
                     dev_issues["low_voltage"] = bool(alerts & {"RVL", "YVL", "BVL"})
@@ -445,9 +433,12 @@ class ThingsBoardClient:
             slon_attr = ""
             lat_attr = ""
             lon_attr = ""
-            # 2. Fetch region, zoneName, wardName, slatitude, slongitude, latitude, longitude attributes for categorization and report
+            active_attr = None
+            last_act_ts = 0
+
+            # 2. Fetch region, zoneName, wardName, slatitude, slongitude, latitude, longitude, active, lastActivityTime attributes
             try:
-                r_attr = self.session.get(f"{self.host}/api/plugins/telemetry/DEVICE/{dev_id}/values/attributes?keys=region,zoneName,wardName,slatitude,slongitude,latitude,longitude,slat,slon,lat,lon", timeout=5)
+                r_attr = self.session.get(f"{self.host}/api/plugins/telemetry/DEVICE/{dev_id}/values/attributes?keys=region,zoneName,wardName,slatitude,slongitude,latitude,longitude,slat,slon,lat,lon,active,lastActivityTime", timeout=12)
                 if r_attr.status_code == 200:
                     for item in r_attr.json():
                         k = item.get("key")
@@ -466,10 +457,51 @@ class ThingsBoardClient:
                             lat_attr = str(v)
                         elif k in ("longitude", "lon") and v is not None:
                             lon_attr = str(v)
+                        elif k == "active":
+                            active_attr = str(v).lower() in ("true", "1", "online")
+                        elif k == "lastActivityTime":
+                            try:
+                                last_act_ts = float(v)
+                            except Exception:
+                                pass
                         if k in ("region", "zoneName", "wardName") and v:
                             combined_str += " " + str(v).upper()
             except Exception:
                 pass
+
+            # Calculate robust effective timestamp (max of payload systime sec, telemetry reception ts, and activity ts)
+            sys_sec = 0
+            if systime_val is not None:
+                try:
+                    val_f = float(systime_val)
+                    if val_f > 100000000000: # Milliseconds
+                        sys_sec = val_f / 1000.0
+                    elif val_f > 100000000: # Seconds
+                        sys_sec = val_f
+                except Exception:
+                    pass
+
+            effective_ts_sec = max(
+                sys_sec,
+                systime_ts / 1000.0,
+                pkt_ts / 1000.0,
+                fault_ts / 1000.0,
+                last_act_ts / 1000.0
+            )
+
+            # Determine Panel Status
+            if str(pkt_val) == "8":
+                dev_issues["power_failure"] = True
+                if pkt_ts >= today_start_ts_ms:
+                    status = "OFFLINE_PF_TODAY"
+                else:
+                    status = "OFFLINE_PF_PRIOR"
+            else:
+                is_recent = (effective_ts_sec > 0 and (now_ts_sec - effective_ts_sec) < THRESHOLD_SEC)
+                if is_recent or active_attr is True:
+                    status = "ONLINE"
+                else:
+                    status = "OFFLINE"
 
             # If surveyed slatitude / slongitude not on device attributes, check related ASSET
             if not slat_attr or not slon_attr:
@@ -523,21 +555,16 @@ class ThingsBoardClient:
             is_offline_pf_gt_7 = False
 
             # Determine last received timestamp for data date
-            last_ts_sec = None
-            if status in ("OFFLINE_PF_TODAY", "OFFLINE_PF_PRIOR") and pkt_ts > 0:
-                last_ts_sec = pkt_ts / 1000.0
-            elif systime_val is not None:
+            last_ts_sec = effective_ts_sec if effective_ts_sec > 0 else (pkt_ts / 1000.0 if pkt_ts > 0 else None)
+            if last_ts_sec and last_ts_sec > 100000000000:
+                last_ts_sec = last_ts_sec / 1000.0
+
+            last_received_date = "-"
+            if last_ts_sec and last_ts_sec > 0:
                 try:
-                    last_ts_sec = float(systime_val)
+                    last_received_date = datetime.fromtimestamp(last_ts_sec).strftime("%Y-%m-%d %H:%M:%S")
                 except Exception:
                     pass
-            if (last_ts_sec is None or last_ts_sec <= 0) and pkt_ts > 0:
-                last_ts_sec = pkt_ts / 1000.0
-
-            if last_ts_sec and last_ts_sec > 0:
-                last_received_date = datetime.fromtimestamp(last_ts_sec).strftime("%Y-%m-%d %H:%M:%S")
-            else:
-                last_received_date = "-"
 
             # Calculate rounded offline duration
             offline_days_str = "-" if status == "ONLINE" else "-"
@@ -567,7 +594,8 @@ class ThingsBoardClient:
                 "low_current": "Low Current",
                 "mcb_trip": "MCB Trip",
                 "relay_failure": "Relay Failure",
-                "meter_comm_failure": "MeterComm Failure"
+                "meter_comm_failure": "MeterComm Failure",
+                "panel_door_open": "Panel Door Open"
             }
             active_issues_list = [label for key, label in SCREENSHOT_ISSUES_MAP.items() if dev_issues.get(key)]
             if is_offline_gt_7:

@@ -260,6 +260,7 @@ HTML_REPORT_TEMPLATE = """
                         <table style="width: 100%; font-size: 13px; margin: 0;">
                             <tr><td style="padding: 4px 0;">Relay Failure</td><td style="text-align: right; font-weight: bold; color: #2b6cb0;">{{ inst_summary.issues.relay_failure }}</td></tr>
                             <tr><td style="padding: 4px 0;">MeterComm Failure</td><td style="text-align: right; font-weight: bold; color: #2b6cb0;">{{ inst_summary.issues.meter_comm_failure }}</td></tr>
+                            <tr><td style="padding: 4px 0;">Panel Door Open</td><td style="text-align: right; font-weight: bold; color: #dd6b20;">{{ inst_summary.issues.panel_door_open }}</td></tr>
                         </table>
                     </td>
                 </tr>

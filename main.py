@@ -46,9 +46,9 @@ def get_mock_panel_data(project_name: str = "BBMP"):
                 "offline_gt_7_days": 18, "offline_pf_gt_7_days": 24
             },
             "affected_panels": [
-                {"id": "dev-101", "name": f"Panel-{proj}-001", "label": "Main Sector 1", "region": "NORTH", "zone": "Zone A", "ward": "Ward 10", "status": "ONLINE", "last_received_date": "2026-08-18 11:59:45", "days_offline": "-", "active_issues": ["Low Voltage"], "lat_lon": "12.97391, 77.64478"},
+                {"id": "dev-101", "name": f"Panel-{proj}-001", "label": "Main Sector 1", "region": "NORTH", "zone": "Zone A", "ward": "Ward 10", "status": "ONLINE", "last_received_date": "2026-08-18 11:59:45", "days_offline": "-", "active_issues": ["Low Voltage", "Panel Door Open"], "lat_lon": "12.97391, 77.64478"},
                 {"id": "dev-102", "name": f"Panel-{proj}-002", "label": "Central Sector 2", "region": "SOUTH", "zone": "Zone B", "ward": "Ward 12", "status": "OFFLINE", "last_received_date": "2026-08-10 10:30:00", "days_offline": "8 Days", "active_issues": ["High Voltage", "Offline (>7 Days)"], "lat_lon": "13.01162, 77.61090"},
-                {"id": "dev-103", "name": f"Panel-{proj}-005", "label": "East Highway 5", "region": "EAST", "zone": "Zone C", "ward": "Ward 15", "status": "OFFLINE_PF_PRIOR", "last_received_date": "2026-08-06 14:15:20", "days_offline": "12 Days", "active_issues": ["High Current / Power Theft", "Offline PF (>7 Days)"], "lat_lon": "13.00363, 77.62065"}
+                {"id": "dev-103", "name": f"Panel-{proj}-005", "label": "East Highway 5", "region": "EAST", "zone": "Zone C", "ward": "Ward 15", "status": "OFFLINE_PF_PRIOR", "last_received_date": "2026-08-06 14:15:20", "days_offline": "12 Days", "active_issues": ["High Current / Power Theft", "Offline PF (>7 Days)", "Panel Door Open"], "lat_lon": "13.00363, 77.62065"}
             ]
         },
         "summary": {"total_devices": 4098, "online_devices": 3975, "offline_devices": 123, "active_alarms": 1},
@@ -109,7 +109,7 @@ def print_terminal_summary(data):
     print("-" * 95)
     print(f"{'Low Voltage:':<20} {issues.get('low_voltage', 0):<7} | {'High Current / Power Theft:':<26} {issues.get('high_current', 0):<5} | {'Relay Failure:':<20} {issues.get('relay_failure', 0):<7}")
     print(f"{'High Voltage:':<20} {issues.get('high_voltage', 0):<7} | {'Low Current:':<26} {issues.get('low_current', 0):<5} | {'MeterComm Failure:':<20} {issues.get('meter_comm_failure', 0):<7}")
-    print(f"{'':<28} | {'MCB Trip:':<26} {issues.get('mcb_trip', 0):<5} | {'':<28}")
+    print(f"{'':<28} | {'MCB Trip:':<26} {issues.get('mcb_trip', 0):<5} | {'Panel Door Open:':<20} {issues.get('panel_door_open', 0):<7}")
     print("-" * 95)
     print(f"🚨 LONG-TERM OFFLINE BREAKDOWN (> 7 DAYS):")
     print(f"  • Offline Panels (> 7 Days):    {inst.get('offline_gt_7_days', issues.get('offline_gt_7_days', 0))}")
@@ -127,12 +127,15 @@ from openpyxl.utils import get_column_letter
 def enrich_panels_with_ticket_status(affected_panels: List[dict], project_name: str = "BBMP") -> None:
     """
     Queries Firebase Firestore tickets and enriches each panel with 'ticket_status'.
-    A ticket is validly raised IF:
-    1. It matches the panel (name, label, or id).
-    2. It is OPEN (status not in closed, resolved, cancel, cancelled).
-    3. It was opened AFTER (or at) the timestamp when panel went offline / last received telemetry data.
+    Only executed for BBMP project (skipped for 5B Innovation).
     """
     if not affected_panels:
+        return
+
+    # Skip ticket querying for 5B Innovation or non-BBMP projects
+    is_bbmp = (str(project_name).strip().upper() == "BBMP")
+    if not is_bbmp:
+        logger.info(f"Skipping Firestore ticket enrichment for project '{project_name}' (tickets are tracked for BBMP only).")
         return
 
     # Skip if ticket_status already present for all panels
@@ -294,10 +297,15 @@ def export_panel_issues_to_csv(data: dict, output_csv: str = "panel_issues_detai
     """Exports granular breakdown of panels with specific dashboard issues to CSV."""
     inst = data.get("installation_report", {})
     affected_panels = inst.get("affected_panels", [])
-    enrich_panels_with_ticket_status(affected_panels, project_name=project_name)
+    is_bbmp = (str(project_name).strip().upper() == "BBMP")
+    if is_bbmp:
+        enrich_panels_with_ticket_status(affected_panels, project_name=project_name)
     csv_path = Path(__file__).resolve().parent / output_csv
     
-    fieldnames = ["Device ID", "Panel Name", "Panel Label", "Region", "Zone Name", "Ward Name", "Status", "Last Received Data Date", "Days Offline", "Active Issues", "Ticket Status", "Lat / Lon"]
+    if is_bbmp:
+        fieldnames = ["Device ID", "Panel Name", "Panel Label", "Region", "Zone Name", "Ward Name", "Status", "Last Received Data Date", "Days Offline", "Active Issues", "Ticket Status", "Lat / Lon"]
+    else:
+        fieldnames = ["Device ID", "Panel Name", "Panel Label", "Region", "Zone Name", "Ward Name", "Status", "Last Received Data Date", "Days Offline", "Active Issues", "Lat / Lon"]
     
     exported_count = 0
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
@@ -307,7 +315,7 @@ def export_panel_issues_to_csv(data: dict, output_csv: str = "panel_issues_detai
             active_issues = p.get("active_issues", [])
             if not active_issues:
                 continue
-            writer.writerow([
+            row = [
                 p.get("id", ""),
                 p.get("name", ""),
                 p.get("label", ""),
@@ -318,9 +326,11 @@ def export_panel_issues_to_csv(data: dict, output_csv: str = "panel_issues_detai
                 p.get("last_received_date", "-"),
                 p.get("days_offline", "-"),
                 ", ".join(active_issues),
-                p.get("ticket_status", "No Ticket Raised"),
-                p.get("lat_lon", "-")
-            ])
+            ]
+            if is_bbmp:
+                row.append(p.get("ticket_status", "No Ticket Raised"))
+            row.append(p.get("lat_lon", "-"))
+            writer.writerow(row)
             exported_count += 1
             
     logger.info(f"Exported detailed panel issues ({exported_count} panels) to {csv_path}")
@@ -331,7 +341,9 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
     """Exports granular breakdown of panels into Excel tabs (regional tabs for BBMP, single sheet for 5B Innovation)."""
     inst = data.get("installation_report", {})
     affected_panels = inst.get("affected_panels", [])
-    enrich_panels_with_ticket_status(affected_panels, project_name=project_name)
+    is_bbmp = (str(project_name).strip().upper() == "BBMP")
+    if is_bbmp:
+        enrich_panels_with_ticket_status(affected_panels, project_name=project_name)
     excel_path = Path(__file__).resolve().parent / output_excel
 
     wb = openpyxl.Workbook()
@@ -352,7 +364,14 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
     data_font = Font(name="Calibri", size=10)
     data_alignment = Alignment(horizontal="left", vertical="center")
 
-    fieldnames = ["Panel Name", "Panel Label", "Region", "Zone Name", "Ward Name", "Status", "Last Received Data Date", "Days Offline", "Active Issues", "Ticket Status", "Lat / Lon"]
+    if is_bbmp:
+        fieldnames = ["Panel Name", "Panel Label", "Region", "Zone Name", "Ward Name", "Status", "Last Received Data Date", "Days Offline", "Active Issues", "Ticket Status", "Lat / Lon"]
+        lat_lon_col_idx = 11
+        centered_cols = (3, 6, 7, 8, 10, 11)
+    else:
+        fieldnames = ["Panel Name", "Panel Label", "Region", "Zone Name", "Ward Name", "Status", "Last Received Data Date", "Days Offline", "Active Issues", "Lat / Lon"]
+        lat_lon_col_idx = 10
+        centered_cols = (3, 6, 7, 8, 10)
 
     link_font = Font(name="Calibri", size=10, color="0000FF", underline="single")
 
@@ -371,7 +390,7 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
         row_idx = 2
         for p in panels:
             lat_lon_val = p.get("lat_lon", "-")
-            ws.append([
+            row_data = [
                 p.get("name", ""),
                 p.get("label", ""),
                 p.get("region", ""),
@@ -380,26 +399,29 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
                 p.get("status", ""),
                 p.get("last_received_date", "-"),
                 p.get("days_offline", "-"),
-                ", ".join(p.get("active_issues", [])),
-                p.get("ticket_status", "No Ticket Raised"),
-                lat_lon_val
-            ])
+                ", ".join(p.get("active_issues", []))
+            ]
+            if is_bbmp:
+                row_data.append(p.get("ticket_status", "No Ticket Raised"))
+            row_data.append(lat_lon_val)
+            ws.append(row_data)
+
             for col_idx, cell in enumerate(ws[row_idx], start=1):
                 cell.font = data_font
                 cell.border = thin_border
-                if col_idx in (3, 6, 7, 8, 10, 11): # Region, Status, Last Received Data Date, Days Offline, Ticket Status & Lat / Lon centered
+                if col_idx in centered_cols:
                     cell.alignment = Alignment(horizontal="center", vertical="center")
                 else:
                     cell.alignment = data_alignment
 
-            # Format Lat / Lon cell as clickable Google Maps hyperlink if valid coordinates (Column 11)
+            # Format Lat / Lon cell as clickable Google Maps hyperlink if valid coordinates
             if lat_lon_val and lat_lon_val != "-" and "," in str(lat_lon_val):
                 coords = [c.strip() for c in str(lat_lon_val).split(",")]
                 if len(coords) == 2:
                     try:
                         lat_f, lon_f = float(coords[0]), float(coords[1])
                         maps_url = f"https://www.google.com/maps?q={lat_f},{lon_f}"
-                        lat_lon_cell = ws.cell(row=row_idx, column=11)
+                        lat_lon_cell = ws.cell(row=row_idx, column=lat_lon_col_idx)
                         lat_lon_cell.hyperlink = maps_url
                         lat_lon_cell.font = link_font
                     except ValueError:
@@ -418,6 +440,12 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
     offline_panels = [
         p for p in affected_panels
         if str(p.get("status", "")).strip().upper() == "OFFLINE"
+    ]
+
+    # Extract panels with door open / tamper issue
+    door_open_panels = [
+        p for p in affected_panels
+        if "Panel Door Open" in p.get("active_issues", []) or p.get("dev_issues", {}).get("panel_door_open")
     ]
 
     is_bbmp = (project_name.upper() == "BBMP")
@@ -446,16 +474,20 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
 
         # Dedicated tab for offline panels alone
         create_sheet("Offline Panels", offline_panels)
-        logger.info(f"Exported BBMP detailed panel issues (Bommanahalli: {len(bom_panels)}, East: {len(east_panels)}, Offline Panels: {len(offline_panels)}) to Excel: {excel_path}")
+        # Dedicated tab for door open panels
+        create_sheet("Door Open Panels", door_open_panels)
+        logger.info(f"Exported BBMP detailed panel issues (Bommanahalli: {len(bom_panels)}, East: {len(east_panels)}, Offline Panels: {len(offline_panels)}, Door Open Panels: {len(door_open_panels)}) to Excel: {excel_path}")
     else:
-        # 5B Innovation or non-BBMP project - Single dedicated sheet plus Offline Panels tab
+        # 5B Innovation or non-BBMP project - Single dedicated sheet plus Offline Panels tab & Door Open Panels tab
         active_5b_panels = [p for p in affected_panels if p.get("active_issues")]
         sheet_title = f"{project_name} Panel Issues" if len(f"{project_name} Panel Issues") <= 30 else "Panel Issues Details"
         create_sheet(sheet_title, active_5b_panels)
 
         # Dedicated tab for offline panels alone
         create_sheet("Offline Panels", offline_panels)
-        logger.info(f"Exported {project_name} detailed panel issues ({len(active_5b_panels)} panels, {len(offline_panels)} offline panels) to Excel: {excel_path}")
+        # Dedicated tab for door open panels
+        create_sheet("Door Open Panels", door_open_panels)
+        logger.info(f"Exported {project_name} detailed panel issues ({len(active_5b_panels)} panels, {len(offline_panels)} offline panels, {len(door_open_panels)} door open panels) to Excel: {excel_path}")
 
     wb.save(excel_path)
     return str(excel_path)
@@ -803,7 +835,7 @@ def main():
         )
         results.append(res)
 
-    if not all(results):
+    if not all(results): 
         sys.exit(1)
 
 
