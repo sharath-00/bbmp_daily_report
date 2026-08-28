@@ -147,6 +147,39 @@ class ThingsBoardClient:
             logger.error(f"Error fetching alarms: {e}")
             return []
 
+    def get_active_door_open_device_ids(self, max_pages: int = 5) -> set:
+        """
+        Queries ThingsBoard Alarms API (/api/alarms?searchStatus=ACTIVE) to retrieve set of device IDs
+        that currently have an active, uncleared Door Open / Tamper alarm in ThingsBoard.
+        Uses pageSize=1000 for sub-5-second response time.
+        """
+        self._ensure_authenticated()
+        active_device_ids = set()
+        page = 0
+        while page < max_pages:
+            url = f"{self.host}/api/alarms?pageSize=1000&page={page}&searchStatus=ACTIVE"
+            try:
+                res = self.session.get(url, timeout=10)
+                if res.status_code == 200:
+                    data = res.json()
+                    items = data.get("data", []) if isinstance(data, dict) else data
+                    for alarm in items:
+                        alarm_type = str(alarm.get("type", "")).lower()
+                        if any(kw in alarm_type for kw in ["door", "tpr", "tamper"]):
+                            orig_id = alarm.get("originator", {}).get("id")
+                            if orig_id:
+                                active_device_ids.add(orig_id)
+                    if not data.get("hasNext", False) or len(items) == 0:
+                        break
+                    page += 1
+                else:
+                    break
+            except Exception as e:
+                logger.warning(f"Error fetching active door alarms on page {page}: {e}")
+                break
+        logger.info(f"Retrieved {len(active_device_ids)} active door open alarms directly from ThingsBoard Alarms API ({page} API calls).")
+        return active_device_ids
+
     def fetch_all_panel_data(self, target_entity_id: Optional[str] = None, target_entity_type: str = "DEVICE", keys: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         High-level helper to gather summary data across all panels/devices or a single panel.
@@ -502,6 +535,10 @@ class ThingsBoardClient:
                     status = "ONLINE"
                 else:
                     status = "OFFLINE"
+
+            # Match ThingsBoard active UI dashboard formula (ONLINE + Power Failure panels, excluding communication OFFLINE)
+            if status == "OFFLINE":
+                dev_issues["panel_door_open"] = False
 
             # If surveyed slatitude / slongitude not on device attributes, check related ASSET
             if not slat_attr or not slon_attr:
