@@ -502,7 +502,7 @@ class ThingsBoardClient:
             except Exception:
                 pass
 
-            # Calculate robust effective timestamp (max of payload systime sec, telemetry reception ts, and activity ts)
+            # Calculate robust telemetry timestamp from actual data received from device
             sys_sec = 0
             if systime_val is not None:
                 try:
@@ -514,12 +514,16 @@ class ThingsBoardClient:
                 except Exception:
                     pass
 
-            effective_ts_sec = max(
+            telemetry_ts_sec = max(
                 sys_sec,
-                systime_ts / 1000.0,
-                pkt_ts / 1000.0,
-                fault_ts / 1000.0,
-                last_act_ts / 1000.0
+                systime_ts / 1000.0 if systime_ts else 0,
+                pkt_ts / 1000.0 if pkt_ts else 0,
+                fault_ts / 1000.0 if fault_ts else 0
+            )
+
+            effective_ts_sec = max(
+                telemetry_ts_sec,
+                last_act_ts / 1000.0 if last_act_ts else 0
             )
 
             # Determine Panel Status
@@ -530,7 +534,7 @@ class ThingsBoardClient:
                 else:
                     status = "OFFLINE_PF_PRIOR"
             else:
-                is_recent = (effective_ts_sec > 0 and (now_ts_sec - effective_ts_sec) < THRESHOLD_SEC)
+                is_recent = (telemetry_ts_sec > 0 and (now_ts_sec - telemetry_ts_sec) < THRESHOLD_SEC) or (effective_ts_sec > 0 and (now_ts_sec - effective_ts_sec) < THRESHOLD_SEC and active_attr is True)
                 if is_recent or active_attr is True:
                     status = "ONLINE"
                 else:
@@ -591,8 +595,8 @@ class ThingsBoardClient:
             is_offline_gt_7 = False
             is_offline_pf_gt_7 = False
 
-            # Determine last received timestamp for data date
-            last_ts_sec = effective_ts_sec if effective_ts_sec > 0 else (pkt_ts / 1000.0 if pkt_ts > 0 else None)
+            # Determine last received timestamp for data date (prioritizing actual telemetry payload timestamp)
+            last_ts_sec = telemetry_ts_sec if telemetry_ts_sec > 0 else (effective_ts_sec if effective_ts_sec > 0 else (dev.get("createdTime", 0) / 1000.0))
             if last_ts_sec and last_ts_sec > 100000000000:
                 last_ts_sec = last_ts_sec / 1000.0
 
