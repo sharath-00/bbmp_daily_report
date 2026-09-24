@@ -1,0 +1,71 @@
+name: Custom / Ad-hoc Panel Telemetry Report
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipient_email:
+        description: 'Recipient Email Address(es) (comma-separated)'
+        required: false
+        default: 'example@example.com'
+      project_name:
+        description: 'Project to run (BBMP, 5B Innovation, or Both)'
+        required: true
+        default: 'Both'
+        type: choice
+        options:
+          - BBMP
+          - 5B Innovation
+          - Both
+  repository_dispatch:
+    types: [send_custom_report]
+
+jobs:
+  run-custom-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Execute Custom Report Pipeline
+        env:
+          THINGSBOARD_HOST: ${{ secrets.THINGSBOARD_HOST }}
+          THINGSBOARD_USERNAME: ${{ secrets.THINGSBOARD_USERNAME }}
+          THINGSBOARD_PASSWORD: ${{ secrets.THINGSBOARD_PASSWORD }}
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USE_TLS: ${{ secrets.SMTP_USE_TLS }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          CUSTOM_RECIPIENT: ${{ secrets.CUSTOM_RECIPIENT_EMAILS }}
+        run: |
+          # Determine the recipient (fallback: workflow_dispatch -> repository_dispatch -> secret)
+          RECIPIENT="${{ github.event.inputs.recipient_email || github.event.client_payload.recipient_email }}"
+          if [ -z "$RECIPIENT" ]; then
+            RECIPIENT="$CUSTOM_RECIPIENT"
+          fi
+          
+          # Determine the project
+          PROJECT="${{ github.event.inputs.project_name || github.event.client_payload.project_name }}"
+          if [ -z "$PROJECT" ]; then
+            PROJECT="BBMP"
+          fi
+
+          if [ -z "$RECIPIENT" ]; then
+            echo "No recipient email specified! Provide it via dispatch inputs/payload or set CUSTOM_RECIPIENT_EMAILS secret."
+            exit 1
+          fi
+
+          echo "Sending $PROJECT report to $RECIPIENT..."
+          python main.py --project "$PROJECT" --to "$RECIPIENT" --send-now
