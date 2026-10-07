@@ -11,6 +11,7 @@ from config import Config
 from tb_client import ThingsBoardClient
 from report_generator import generate_html_report
 from mail_sender import EmailSender
+import json
 
 logger = logging.getLogger("BBMP_Panel_Report.Main")
 
@@ -52,6 +53,15 @@ def get_mock_panel_data(project_name: str = "BBMP"):
             ]
         },
         "summary": {"total_devices": 4098, "online_devices": 3975, "offline_devices": 123, "active_alarms": 1},
+        "historical_offline_data": [
+            {"date": "2026-10-01", "offline_count": 115},
+            {"date": "2026-10-02", "offline_count": 118},
+            {"date": "2026-10-03", "offline_count": 120},
+            {"date": "2026-10-04", "offline_count": 125},
+            {"date": "2026-10-05", "offline_count": 121},
+            {"date": "2026-10-06", "offline_count": 122},
+            {"date": "2026-10-07", "offline_count": 123}
+        ],
         "alarms": [
             {
                 "type": "LOW_VOLTAGE_ALARM",
@@ -494,6 +504,41 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
 
 
 
+def update_and_get_historical_offline_data(offline_count: int, project_name: str) -> List[dict]:
+    history_file = Path(__file__).resolve().parent / f"history_{project_name.lower().replace(' ', '_')}.json"
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    history = []
+    if history_file.exists():
+        try:
+            with open(history_file, "r") as f:
+                history = json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to read history file: {e}")
+            
+    # Update or add today's entry
+    updated = False
+    for entry in history:
+        if entry.get("date") == today_str:
+            entry["offline_count"] = offline_count
+            updated = True
+            break
+            
+    if not updated:
+        history.append({"date": today_str, "offline_count": offline_count})
+        
+    # Keep only the last 30 days
+    history = history[-30:]
+    
+    try:
+        with open(history_file, "w") as f:
+            json.dump(history, f, indent=4)
+    except Exception as e:
+        logger.warning(f"Failed to write history file: {e}")
+        
+    return history
+
+
 def list_customers_cmd():
     """Authenticates with ThingsBoard and prints all available Customers and their IDs."""
     logger.info("Connecting to ThingsBoard to list available Customers...")
@@ -585,13 +630,17 @@ def run_pipeline(
                 raise RuntimeError(f"Data fetching failed for project '{proj_name}': 0 panels retrieved.")
 
             alarms = tb_client.get_active_alarms()
+            offline_count = inst_report.get("combined", {}).get("offline", 0)
+            hist_data = update_and_get_historical_offline_data(offline_count, proj_name)
+            
             data = {
                 "installation_report": inst_report,
                 "alarms": alarms,
+                "historical_offline_data": hist_data,
                 "summary": {
                     "total_devices": inst_report.get("total_panels", 0),
                     "online_devices": inst_report.get("combined", {}).get("online", 0),
-                    "offline_devices": inst_report.get("combined", {}).get("offline", 0),
+                    "offline_devices": offline_count,
                     "active_alarms": len(alarms)
                 }
             }

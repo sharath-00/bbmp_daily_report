@@ -266,6 +266,29 @@ HTML_REPORT_TEMPLATE = """
                 </tr>
             </table>
 
+            <!-- Historical Offline Trend -->
+            {% if historical_offline_data and historical_offline_data|length > 0 %}
+            <h3 class="section-title">📉 30-Day Offline Trend</h3>
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px 10px; margin-bottom: 20px;">
+                <div style="display: table; width: 100%; height: 160px; table-layout: fixed;">
+                    {% for item in historical_offline_data %}
+                    <div style="display: table-cell; vertical-align: bottom; text-align: center; padding: 0 1px;">
+                        <div style="font-size: 10px; color: #4a5568; font-weight: bold; margin-bottom: 3px;">{{ item.offline_count }}</div>
+                        <div style="background: #c53030; width: 100%; height: {{ (item.offline_count / max_offline_count * 85)|int }}%; min-height: 2px; border-top-left-radius: 2px; border-top-right-radius: 2px; margin: 0 auto; max-width: 18px;"></div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <!-- X-axis Labels -->
+                <div style="display: table; width: 100%; table-layout: fixed; margin-top: 8px;">
+                    {% for item in historical_offline_data %}
+                    <div style="display: table-cell; text-align: center; font-size: 9px; color: #718096; padding: 0 1px; overflow: hidden;">
+                        {{ item.date[-2:] }}/{{ item.date[-5:-3] }}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Long-Term Offline Cards (> 7 Days) -->
             <table style="width: 100%; border-spacing: 12px; border-collapse: separate; margin-bottom: 20px;">
                 <tr>
@@ -398,6 +421,11 @@ def generate_html_report(data: Optional[Dict[str, Any]] = None) -> str:
         google_maps_multi_url = f"https://www.google.com/maps/dir/{'/'.join(coords_list[:10])}"
     else:
         google_maps_multi_url = "https://maps.google.com"
+        
+    hist_data = safe_data.get("historical_offline_data", [])
+    max_offline = max([h.get("offline_count", 0) for h in hist_data]) if hist_data else 10
+    if max_offline == 0:
+        max_offline = 10
 
     return template.render(
         generated_at=now_str,
@@ -408,5 +436,7 @@ def generate_html_report(data: Optional[Dict[str, Any]] = None) -> str:
         has_map_img=bool(coords_list),
         summary=safe_data.get("summary", {"total_devices": 0, "online_devices": 0, "offline_devices": 0, "active_alarms": 0}),
         devices=safe_data.get("devices", []),
-        alarms=safe_data.get("alarms", [])
+        alarms=safe_data.get("alarms", []),
+        historical_offline_data=hist_data,
+        max_offline_count=max_offline
     )

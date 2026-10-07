@@ -22,6 +22,8 @@ on:
 jobs:
   run-custom-report:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -69,3 +71,11 @@ jobs:
 
           echo "Sending $PROJECT report to $RECIPIENT..."
           python main.py --project "$PROJECT" --to "$RECIPIENT" --send-now
+
+      - name: Commit Historical Data
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add history_*.json
+          git commit -m "Update historical offline panel data [skip ci]" || echo "No changes to commit"
+          git push

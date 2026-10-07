@@ -8,6 +8,8 @@ on:
 jobs:
   run-report:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -41,3 +43,11 @@ jobs:
           EMAIL_THREAD_ID: ${{ secrets.EMAIL_THREAD_ID || 'bbmp-panel-telemetry-report-thread@bbmp.local' }}
         run: |
           python main.py --project "BBMP" --send-now
+
+      - name: Commit Historical Data
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add history_*.json
+          git commit -m "Update historical offline panel data [skip ci]" || echo "No changes to commit"
+          git push
