@@ -716,13 +716,13 @@ class ThingsBoardClient:
         combined_offline_pf_today = sum(r["offline_pf_today"] for r in dynamic_regions.values())
         combined_offline_pf_prior = sum(r["offline_pf_prior"] for r in dynamic_regions.values())
         combined_offline_pf = combined_offline_pf_today + combined_offline_pf_prior
-        combined_total = len(devices)
+        combined_total = sum(r["total"] for r in dynamic_regions.values())
 
         total_offline_excl_pf = combined_offline
         total_high_current = issues_summary.get("high_current", 0)
         total_mcb_trip = issues_summary.get("mcb_trip", 0)
         total_meter_comm = issues_summary.get("meter_comm_failure", 0)
-        total_panels_count = len(devices)
+        total_panels_count = combined_total
 
         # Penalty points calculation excluding offline(pf)
         penalty_points = (total_offline_excl_pf * 1) + (total_high_current * 10) + (total_mcb_trip * 5) + (total_meter_comm * 5)
@@ -761,6 +761,6 @@ class ThingsBoardClient:
             },
             "issues": issues_summary,
             "affected_panels": affected_panels,
-            "total_panels": len(devices)
+            "total_panels": combined_total
         }
 
