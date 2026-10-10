@@ -1,0 +1,58 @@
+name: Daily NHAI Chengalpattu Panel Report
+
+on:
+  workflow_dispatch: # Allows manual run anytime from GitHub Actions tab
+  schedule:
+    - cron: '0 3 * * *' # Example: Runs every day at 03:00 UTC (8:30 AM IST)
+  repository_dispatch:
+    types: [run_nhai_report]
+
+jobs:
+  run-report:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Fallback to main folder requirements if no specific one in nhai_chengalpattu
+          if [ -f "nhai_chengalpattu/requirements.txt" ]; then
+            pip install -r nhai_chengalpattu/requirements.txt
+          else
+            pip install -r requirements.txt
+          fi
+
+      - name: Execute Daily Report Pipeline
+        working-directory: ./nhai_chengalpattu
+        env:
+          THINGSBOARD_HOST: ${{ secrets.THINGSBOARD_HOST }}
+          THINGSBOARD_USERNAME: ${{ secrets.THINGSBOARD_USERNAME }}
+          THINGSBOARD_PASSWORD: ${{ secrets.THINGSBOARD_PASSWORD }}
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USE_TLS: ${{ secrets.SMTP_USE_TLS }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          RECIPIENT_EMAILS: vinoth.joel@schnellenergy.com
+          PROJECT_NAME: "NHAI Chengalpattu"
+        run: |
+          python main.py --send-now
+
+      - name: Commit Historical Data
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add nhai_chengalpattu/history_*.json
+          git commit -m "Update NHAI historical offline panel data [skip ci]" || echo "No changes to commit"
+          git push
