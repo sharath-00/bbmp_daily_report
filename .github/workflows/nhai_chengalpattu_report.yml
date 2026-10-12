@@ -2,8 +2,7 @@ name: Daily NHAI Chengalpattu Panel Report
 
 on:
   workflow_dispatch: # Allows manual run anytime from GitHub Actions tab
-  schedule:
-    - cron: '0 3 * * *' # Example: Runs every day at 03:00 UTC (8:30 AM IST)
+ # Example: Runs every day at 03:00 UTC (8:30 AM IST)
   repository_dispatch:
     types: [run_nhai_report]
 
