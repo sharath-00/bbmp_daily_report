@@ -269,23 +269,49 @@ HTML_REPORT_TEMPLATE = """
             <!-- Historical Offline Trend -->
             {% if historical_offline_data and historical_offline_data|length > 0 %}
             <h3 class="section-title">📉 30-Day Offline Trend</h3>
-            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px 10px; margin-bottom: 20px;">
-                <div style="display: table; width: 100%; height: 160px; table-layout: fixed;">
-                    {% for item in historical_offline_data %}
-                    <div style="display: table-cell; vertical-align: bottom; text-align: center; padding: 0 1px;">
-                        <div style="font-size: 10px; color: #4a5568; font-weight: bold; margin-bottom: 3px;">{{ item.offline_count }}</div>
-                        <div style="background: #c53030; width: 100%; height: {{ (item.offline_count / max_offline_count * 85)|int }}%; min-height: 2px; border-top-left-radius: 2px; border-top-right-radius: 2px; margin: 0 auto; max-width: 18px;"></div>
-                    </div>
-                    {% endfor %}
-                </div>
-                <!-- X-axis Labels -->
-                <div style="display: table; width: 100%; table-layout: fixed; margin-top: 8px;">
-                    {% for item in historical_offline_data %}
-                    <div style="display: table-cell; text-align: center; font-size: 9px; color: #718096; padding: 0 1px; overflow: hidden;">
-                        {{ item.date[-2:] }}/{{ item.date[-5:-3] }}
-                    </div>
-                    {% endfor %}
-                </div>
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px 10px; margin-bottom: 20px;">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0 auto;">
+                    <!-- Row 1: Offline Count Numbers -->
+                    <tr>
+                        {% for item in historical_offline_data %}
+                        <td align="center" valign="bottom" width="3.33%" style="width: 3.33%; padding: 0 1px 3px 1px; text-align: center; vertical-align: bottom;">
+                            <div style="font-size: 7.5px; color: {% if item.is_latest %}#9b2c2c; font-weight: 800;{% else %}#4a5568; font-weight: 600;{% endif %} line-height: 1; white-space: nowrap;" title="{{ item.date }}: {{ item.offline_count }} offline">{{ item.offline_count }}</div>
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    <!-- Row 2: Bars sitting on baseline -->
+                    <tr style="height: 100px;">
+                        {% for item in historical_offline_data %}
+                        <td align="center" valign="bottom" height="100" width="3.33%" style="width: 3.33%; height: 100px; padding: 0 1px; text-align: center; vertical-align: bottom; border-bottom: 2px solid #cbd5e0;">
+                            <div style="background-color: {% if item.is_latest %}#9b2c2c{% else %}#c53030{% endif %}; width: 100%; max-width: 13px; min-width: 5px; height: {{ item.bar_height }}px; line-height: {{ item.bar_height }}px; font-size: 1px; border-top-left-radius: 2px; border-top-right-radius: 2px; margin: 0 auto;" title="{{ item.date }}: {{ item.offline_count }} offline panels">&nbsp;</div>
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    <!-- Row 3: Day Label -->
+                    <tr>
+                        {% for item in historical_offline_data %}
+                        <td align="center" valign="top" width="3.33%" style="width: 3.33%; padding: 4px 1px 0 1px; text-align: center; vertical-align: top; overflow: hidden;">
+                            <div style="font-size: 8px; color: {% if item.is_latest %}#2d3748; font-weight: bold;{% else %}#718096;{% endif %} line-height: 1.1; white-space: nowrap;" title="{{ item.date }}">
+                                {{ item.day }}
+                            </div>
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    <!-- Row 4: Month Label -->
+                    <tr>
+                        {% for item in historical_offline_data %}
+                        <td align="center" valign="top" width="3.33%" style="width: 3.33%; padding: 1px 0 0 0; text-align: center; vertical-align: top; overflow: hidden;">
+                            {% if loop.first or item.day == '01' or loop.last %}
+                            <div style="font-size: 7px; color: #a0aec0; font-weight: bold; text-transform: uppercase; line-height: 1; white-space: nowrap;">
+                                {{ item.month }}
+                            </div>
+                            {% else %}
+                            <div style="font-size: 7px; line-height: 1;">&nbsp;</div>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                </table>
             </div>
             {% endif %}
 
@@ -423,9 +449,37 @@ def generate_html_report(data: Optional[Dict[str, Any]] = None) -> str:
         google_maps_multi_url = "https://maps.google.com"
         
     hist_data = safe_data.get("historical_offline_data", [])
-    max_offline = max([h.get("offline_count", 0) for h in hist_data]) if hist_data else 10
-    if max_offline == 0:
+    max_offline = max([int(h.get("offline_count", 0)) for h in hist_data]) if hist_data else 10
+    if max_offline <= 0:
         max_offline = 10
+
+    chart_max_height = 90
+    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    processed_hist_data = []
+    for idx, h in enumerate(hist_data):
+        raw_cnt = h.get("offline_count", 0)
+        try:
+            cnt = int(raw_cnt)
+        except (ValueError, TypeError):
+            cnt = 0
+        bar_h = max(4, int(round((cnt / max_offline) * chart_max_height)))
+        date_str = str(h.get("date", "")).strip()
+        day_str = date_str[-2:] if len(date_str) >= 10 else date_str
+        try:
+            m_idx = int(date_str[5:7]) - 1
+            month_name = months[m_idx] if 0 <= m_idx < 12 else date_str[5:7]
+        except (ValueError, IndexError):
+            month_name = ""
+        is_latest = (idx == len(hist_data) - 1)
+        processed_hist_data.append({
+            "date": date_str,
+            "day": day_str,
+            "month": month_name,
+            "label": f"{day_str}/{date_str[5:7]}" if len(date_str) >= 7 else day_str,
+            "offline_count": cnt,
+            "bar_height": bar_h,
+            "is_latest": is_latest
+        })
 
     return template.render(
         generated_at=now_str,
@@ -437,6 +491,6 @@ def generate_html_report(data: Optional[Dict[str, Any]] = None) -> str:
         summary=safe_data.get("summary", {"total_devices": 0, "online_devices": 0, "offline_devices": 0, "active_alarms": 0}),
         devices=safe_data.get("devices", []),
         alarms=safe_data.get("alarms", []),
-        historical_offline_data=hist_data,
+        historical_offline_data=processed_hist_data,
         max_offline_count=max_offline
     )
