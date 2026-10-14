@@ -257,8 +257,8 @@ def export_panel_issues_to_excel(data: dict, output_excel: str = "panel_issues_d
 
 def update_and_get_historical_offline_data(offline_count: int, project_name: str) -> List[dict]:
     """
-    Maintains and returns a continuous 30-day chronological list of daily offline counts for the project.
-    Always ensures a complete 30-day sequence ending today, preserving real recorded entries.
+    Maintains and returns a chronological list of real recorded daily offline counts for the project (up to 30 days).
+    Only stores and appends real recorded entries, allowing history to grow naturally day-by-day.
     """
     clean_proj = "nhai_chengalpattu" if "nhai" in project_name.lower() else project_name.lower().replace(' ', '_')
     history_file = Path(__file__).resolve().parent / f"history_{clean_proj}.json"
@@ -289,28 +289,13 @@ def update_and_get_historical_offline_data(offline_count: int, project_name: str
     except (ValueError, TypeError):
         history_dict[today_str] = 0
 
-    # Generate exact 30 consecutive calendar days ending today
-    required_dates = [(today_dt - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(29, -1, -1)]
+    # Sort all real recorded dates chronologically
+    sorted_dates = sorted(history_dict.keys())
+    
+    # Keep only the last 30 days of real recorded history
+    recent_dates = sorted_dates[-30:]
 
-    # Compute baseline for any missing days from past recorded entries (or current count)
-    past_vals = [v for k, v in history_dict.items() if k < today_str and k in required_dates]
-    if past_vals:
-        baseline = int(round(sum(past_vals) / len(past_vals)))
-    elif history_dict:
-        baseline = int(round(sum(history_dict.values()) / len(history_dict)))
-    else:
-        baseline = int(offline_count)
-
-    result_history = []
-    for d in required_dates:
-        if d in history_dict:
-            cnt = int(history_dict[d])
-        else:
-            seed = sum(ord(c) for c in d)
-            variance = ((seed % 7) - 3)
-            cnt = max(0, baseline + variance)
-            history_dict[d] = cnt
-        result_history.append({"date": d, "offline_count": cnt})
+    result_history = [{"date": d, "offline_count": int(history_dict[d])} for d in recent_dates]
 
     try:
         with open(history_file, "w") as f:

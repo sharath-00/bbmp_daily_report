@@ -270,13 +270,13 @@ HTML_REPORT_TEMPLATE = """
 
             <!-- Historical Offline Trend -->
             {% if historical_offline_data and historical_offline_data|length > 0 %}
-            <h3 class="section-title">📉 30-Day Offline Trend</h3>
+            <h3 class="section-title">📉 {% if historical_offline_data|length >= 30 %}30-Day {% endif %}Offline Trend</h3>
             <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px 10px; margin-bottom: 20px;">
                 <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0 auto;">
                     <!-- Row 1: Offline Count Numbers -->
                     <tr>
                         {% for item in historical_offline_data %}
-                        <td align="center" valign="bottom" width="3.33%" style="width: 3.33%; padding: 0 1px 3px 1px; text-align: center; vertical-align: bottom;">
+                        <td align="center" valign="bottom" width="{{ col_width }}%" style="width: {{ col_width }}%; padding: 0 1px 3px 1px; text-align: center; vertical-align: bottom;">
                             <div style="font-size: 7.5px; color: {% if item.is_latest %}#9b2c2c; font-weight: 800;{% else %}#4a5568; font-weight: 600;{% endif %} line-height: 1; white-space: nowrap;" title="{{ item.date }}: {{ item.offline_count }} offline">{{ item.offline_count }}</div>
                         </td>
                         {% endfor %}
@@ -284,15 +284,15 @@ HTML_REPORT_TEMPLATE = """
                     <!-- Row 2: Bars sitting on baseline -->
                     <tr style="height: 100px;">
                         {% for item in historical_offline_data %}
-                        <td align="center" valign="bottom" height="100" width="3.33%" style="width: 3.33%; height: 100px; padding: 0 1px; text-align: center; vertical-align: bottom; border-bottom: 2px solid #cbd5e0;">
-                            <div style="background-color: {% if item.is_latest %}#9b2c2c{% else %}#c53030{% endif %}; width: 100%; max-width: 13px; min-width: 5px; height: {{ item.bar_height }}px; line-height: {{ item.bar_height }}px; font-size: 1px; border-top-left-radius: 2px; border-top-right-radius: 2px; margin: 0 auto;" title="{{ item.date }}: {{ item.offline_count }} offline panels">&nbsp;</div>
+                        <td align="center" valign="bottom" height="100" width="{{ col_width }}%" style="width: {{ col_width }}%; height: 100px; padding: 0 1px; text-align: center; vertical-align: bottom; border-bottom: 2px solid #cbd5e0;">
+                            <div style="background-color: {% if item.is_latest %}#9b2c2c{% else %}#c53030{% endif %}; width: 100%; max-width: 16px; min-width: 5px; height: {{ item.bar_height }}px; line-height: {{ item.bar_height }}px; font-size: 1px; border-top-left-radius: 2px; border-top-right-radius: 2px; margin: 0 auto;" title="{{ item.date }}: {{ item.offline_count }} offline panels">&nbsp;</div>
                         </td>
                         {% endfor %}
                     </tr>
                     <!-- Row 3: Day Label -->
                     <tr>
                         {% for item in historical_offline_data %}
-                        <td align="center" valign="top" width="3.33%" style="width: 3.33%; padding: 4px 1px 0 1px; text-align: center; vertical-align: top; overflow: hidden;">
+                        <td align="center" valign="top" width="{{ col_width }}%" style="width: {{ col_width }}%; padding: 4px 1px 0 1px; text-align: center; vertical-align: top; overflow: hidden;">
                             <div style="font-size: 8px; color: {% if item.is_latest %}#2d3748; font-weight: bold;{% else %}#718096;{% endif %} line-height: 1.1; white-space: nowrap;" title="{{ item.date }}">
                                 {{ item.day }}
                             </div>
@@ -302,7 +302,7 @@ HTML_REPORT_TEMPLATE = """
                     <!-- Row 4: Month Label -->
                     <tr>
                         {% for item in historical_offline_data %}
-                        <td align="center" valign="top" width="3.33%" style="width: 3.33%; padding: 1px 0 0 0; text-align: center; vertical-align: top; overflow: hidden;">
+                        <td align="center" valign="top" width="{{ col_width }}%" style="width: {{ col_width }}%; padding: 1px 0 0 0; text-align: center; vertical-align: top; overflow: hidden;">
                             {% if loop.first or item.day == '01' or loop.last %}
                             <div style="font-size: 7px; color: #a0aec0; font-weight: bold; text-transform: uppercase; line-height: 1; white-space: nowrap;">
                                 {{ item.month }}
@@ -483,6 +483,8 @@ def generate_html_report(data: Optional[Dict[str, Any]] = None) -> str:
             "is_latest": is_latest
         })
 
+    col_width = round(100.0 / len(processed_hist_data), 2) if processed_hist_data else 3.33
+
     return template.render(
         generated_at=now_str,
         project_name=proj_name,
@@ -494,5 +496,6 @@ def generate_html_report(data: Optional[Dict[str, Any]] = None) -> str:
         devices=safe_data.get("devices", []),
         alarms=safe_data.get("alarms", []),
         historical_offline_data=processed_hist_data,
+        col_width=col_width,
         max_offline_count=max_offline
     )
