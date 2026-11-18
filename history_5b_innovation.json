@@ -1,9 +1,5 @@
 [
     {
-        "date": "2026-10-19",
-        "offline_count": 249
-    },
-    {
         "date": "2026-10-20",
         "offline_count": 240
     },
@@ -118,5 +114,9 @@
     {
         "date": "2026-11-17",
         "offline_count": 242
+    },
+    {
+        "date": "2026-11-18",
+        "offline_count": 243
     }
 ]
